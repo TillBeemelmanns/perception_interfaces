@@ -244,37 +244,46 @@ void ObjectState::setObjectStateVizDefault(const perception_msgs::msg::ObjectSta
     Ogre::Entity* entity;
     Ogre::MeshPtr mesh;
 
+    std::string package;
+
     using namespace perception_msgs::msg;
     switch (classification_.type) {
       case ObjectClassification::CAR:
-        mesh = rviz_rendering::loadMeshFromResource("package://perception_msgs_rendering/meshes/car.stl");
+        package = "package://perception_msgs_rendering/meshes/car.stl";
         material = "CarMaterial";
         break;
       case ObjectClassification::TRUCK:
-        mesh = rviz_rendering::loadMeshFromResource("package://perception_msgs_rendering/meshes/truck.stl");
+        package = "package://perception_msgs_rendering/meshes/truck.stl";
         material = "TruckMaterial";
         break;
       case ObjectClassification::BUS:
-        mesh = rviz_rendering::loadMeshFromResource("package://perception_msgs_rendering/meshes/bus.stl");
+        package = "package://perception_msgs_rendering/meshes/bus.stl";
         material = "BusMaterial";
         break;
       case ObjectClassification::BICYCLE:
-        mesh = rviz_rendering::loadMeshFromResource("package://perception_msgs_rendering/meshes/bicycle.stl");
+        package = "package://perception_msgs_rendering/meshes/bicycle.stl";
         material = "BicycleMaterial";
         break;
       case ObjectClassification::MOTORBIKE:
-        mesh = rviz_rendering::loadMeshFromResource("package://perception_msgs_rendering/meshes/motorbike.stl");
+        package = "package://perception_msgs_rendering/meshes/motorbike.stl";
         material = "MotorbikeMaterial";
         break;
       case ObjectClassification::PEDESTRIAN:
-        mesh = rviz_rendering::loadMeshFromResource("package://perception_msgs_rendering/meshes/pedestrian.stl");
+        package = "package://perception_msgs_rendering/meshes/pedestrian.stl";
         material = "PedestrianMaterial";
         break;
       default:
-        mesh = rviz_rendering::loadMeshFromResource("package://perception_msgs_rendering/meshes/car.stl");
+        package = "package://perception_msgs_rendering/meshes/car.stl";
         material = "CarMaterial";
         break;
     }
+
+  #if defined(ROS_DISTRO_noetic) || defined(ROS_DISTRO_humble) || defined(ROS_DISTRO_jazzy)
+    mesh = rviz_rendering::loadMeshFromResource(package);
+  #else
+    resource_retriever::Retriever* retriever;
+    mesh = rviz_rendering::loadMeshFromResource(retriever, package);
+  #endif  
 
     // Check if mesh was loaded successfully (nullptr if loading failed)
     if (mesh)
@@ -416,6 +425,7 @@ void ObjectState::setObjectPredictionsVizDefault(
     billboard_line_prediction->setColor(line_color.r, line_color.g, line_color.b, line_color.a);
     float line_width = prediction_line_width_;
     billboard_line_prediction->setLineWidth(line_width);
+    billboard_line_prediction->setMaxPointsPerLine(states.size());
     auto base_state = perception_msgs::object_access::getPose(object_state_);
     tf2::Transform base_state_tf;
     tf2::fromMsg(base_state, base_state_tf);

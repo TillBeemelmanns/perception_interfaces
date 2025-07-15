@@ -3,6 +3,9 @@ project(perception_msgs_rendering)
 
 find_package(ros_environment REQUIRED QUIET)
 set(ROS_VERSION $ENV{ROS_VERSION})
+set(ROS_DISTRO $ENV{ROS_DISTRO})
+
+add_compile_definitions(ROS_DISTRO_${ROS_DISTRO})
 
 # === ROS2 (AMENT) =============================================================
 if(${ROS_VERSION} EQUAL 2)
@@ -23,6 +26,12 @@ if(${ROS_VERSION} EQUAL 2)
   find_package(rviz_ogre_vendor REQUIRED)
   find_package(rviz_rendering REQUIRED)
   find_package(tf2_geometry_msgs REQUIRED)
+
+  if(NOT ROS_DISTRO STREQUAL "noetic"
+      AND NOT ROS_DISTRO STREQUAL "humble"
+      AND NOT ROS_DISTRO STREQUAL "jazzy")
+    find_package(resource_retriever REQUIRED)
+  endif()
 
   # Adds shallow folders containing ogre_media such as meshes and scripts to Rviz
   # so that they can be found at runtime. Requires rviz_rendering.
@@ -57,6 +66,11 @@ if(${ROS_VERSION} EQUAL 2)
     rviz_rendering
     tf2_geometry_msgs
   )
+  if(NOT ROS_DISTRO STREQUAL "noetic"
+      AND NOT ROS_DISTRO STREQUAL "humble"
+      AND NOT ROS_DISTRO STREQUAL "jazzy")
+    ament_target_dependencies(${PROJECT_NAME} PUBLIC resource_retriever)
+  endif()
 
   ament_export_dependencies(
     geometry_msgs
