@@ -33,4 +33,26 @@
     <message_type>perception_msgs/msg/ObjectList</message_type>
   </class>
 
+  <class
+    name="AttentionVector"
+    type="perception_msgs::displays::AttentionVectorDisplay"
+    base_class_type="rviz_common::Display"
+  >
+    <description>
+      Displays attention vectors as red arrows from ego position to detected objects.
+    </description>
+    <message_type>perception_msgs/msg/ObjectList</message_type>
+  </class>
+
+  <class
+    name="AttentionGrid"
+    type="perception_msgs::displays::AttentionGridDisplay"
+    base_class_type="rviz_common::Display"
+  >
+    <description>
+      Enhanced occupancy grid display with advanced colormaps and alpha transparency for attention visualization.
+    </description>
+    <message_type>nav_msgs/msg/OccupancyGrid</message_type>
+  </class>
+
 </library>

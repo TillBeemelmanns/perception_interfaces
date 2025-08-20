@@ -1,0 +1,16 @@
+PLACEHOLDER: Replace this file with AttentionVector.png
+
+This file should be a 16x16 pixel PNG icon representing attention vectors.
+The icon should visually represent arrows or attention vectors pointing toward objects.
+
+Suggested icon design:
+- Red arrow(s) pointing outward from a central point
+- Simple, clear design that works at 16x16 pixels
+- Consistent with RViz icon style
+
+To create the icon:
+1. Remove this .placeholder file
+2. Create AttentionVector.png (16x16 pixels)
+3. Place it in this same directory
+
+The icon filename must match the plugin class name "AttentionVector" exactly.

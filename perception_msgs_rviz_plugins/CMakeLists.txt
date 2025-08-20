@@ -29,11 +29,15 @@ if(${ROS_VERSION} EQUAL 2)
   find_package(tf2 REQUIRED)
   find_package(tf2_ros REQUIRED)
   find_package(tf2_geometry_msgs REQUIRED)
+  find_package(nav_msgs REQUIRED)
+  find_package(map_msgs REQUIRED)
 
   set(display_headers_to_moc
     include/perception_msgs/displays/object_list/object_list_display.hpp
     include/perception_msgs/displays/ego_data/ego_data_display.hpp
     include/perception_msgs/displays/traffic_light/traffic_light_display.hpp
+    include/perception_msgs/displays/attention_vector/attention_vector_display.hpp
+    include/perception_msgs/displays/attention_grid/attention_grid_display.hpp
   )
 
   foreach(header "${display_headers_to_moc}")
@@ -44,6 +48,9 @@ if(${ROS_VERSION} EQUAL 2)
     src/displays/object_list/object_list_display.cpp
     src/displays/ego_data/ego_data_display.cpp
     src/displays/traffic_light/traffic_light_display.cpp
+    src/displays/attention_vector/attention_vector_display.cpp
+    src/displays/attention_grid/attention_grid_display.cpp
+    src/displays/attention_grid/attention_swatch.cpp
   )
 
   add_library(${PROJECT_NAME} SHARED
@@ -75,6 +82,8 @@ if(${ROS_VERSION} EQUAL 2)
     rviz_rendering
     tf2
     tf2_ros
+    nav_msgs
+    map_msgs
   )
 
   # Export modern CMake targets
@@ -90,6 +99,8 @@ if(${ROS_VERSION} EQUAL 2)
     rviz_ogre_vendor
     tf2
     tf2_ros
+    nav_msgs
+    map_msgs
   )
 
   install(
@@ -98,6 +109,12 @@ if(${ROS_VERSION} EQUAL 2)
     ARCHIVE DESTINATION lib
     LIBRARY DESTINATION lib
     RUNTIME DESTINATION bin
+  )
+
+  # Install plugin icons
+  install(FILES icons/classes/AttentionVector.png
+          DESTINATION share/${PROJECT_NAME}/icons/classes
+          OPTIONAL
   )
   # RViz Display End
 
