@@ -111,11 +111,6 @@ if(${ROS_VERSION} EQUAL 2)
     RUNTIME DESTINATION bin
   )
 
-  # Install plugin icons
-  install(FILES icons/classes/AttentionVector.png
-          DESTINATION share/${PROJECT_NAME}/icons/classes
-          OPTIONAL
-  )
   # RViz Display End
 
   if(BUILD_TESTING)

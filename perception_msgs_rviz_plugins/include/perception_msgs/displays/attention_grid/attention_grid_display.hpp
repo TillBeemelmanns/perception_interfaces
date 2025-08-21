@@ -65,13 +65,11 @@ class AttentionSwatch;
 
 /**
  * \class AttentionGridDisplay
- * \brief Enhanced occupancy grid display with advanced colormaps and alpha transparency
+ * \brief Enhanced occupancy grid display with advanced colormaps
  * 
  * This plugin provides improved visualization of occupancy grids with:
  * - Multiple colormap options (jet, hot, magma, etc.)
- * - Alpha transparency based on probability values
  * - Better highlighting of high-attention areas
- * - Configurable transparency thresholds for low probability cells
  */
 class AttentionGridDisplay : public rviz_common::MessageFilterDisplay<nav_msgs::msg::OccupancyGrid> {
   Q_OBJECT
