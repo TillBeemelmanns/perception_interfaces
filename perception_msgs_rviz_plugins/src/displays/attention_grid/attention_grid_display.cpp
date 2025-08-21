@@ -56,23 +56,6 @@ AttentionGridDisplay::AttentionGridDisplay()
   colormap_property_->addOption("Plasma", 4);
   colormap_property_->addOption("Grayscale", 5);
 
-  use_alpha_transparency_ = new rviz_common::properties::BoolProperty(
-    "Use Alpha Transparency", true,
-    "Make low probability cells transparent based on their values.",
-    this, SLOT(updatePalette()));
-
-  alpha_threshold_property_ = new rviz_common::properties::FloatProperty(
-    "Alpha Threshold", 0.2f,
-    "Probability threshold below which cells become transparent.",
-    this, SLOT(updatePalette()));
-  alpha_threshold_property_->setMin(0.0f);
-  alpha_threshold_property_->setMax(1.0f);
-
-  colormap_max_value_property_ = new rviz_common::properties::FloatProperty(
-    "Colormap Max Value", 1.0f,
-    "Maximum value for colormap scaling.",
-    this, SLOT(updatePalette()));
-  colormap_max_value_property_->setMin(0.001f);
 
   draw_under_property_ = new rviz_common::properties::BoolProperty(
     "Draw Behind", false,
@@ -111,9 +94,6 @@ AttentionGridDisplay::~AttentionGridDisplay()
   clear();
   
   delete colormap_property_;
-  delete colormap_max_value_property_;
-  delete use_alpha_transparency_;
-  delete alpha_threshold_property_;
   delete draw_under_property_;
   delete resolution_property_;
   delete width_property_;
@@ -135,10 +115,8 @@ void AttentionGridDisplay::updateDrawUnder()
 {
   bool draw_under = draw_under_property_->getBool();
 
-  if (alpha_property_->getFloat() >= rviz_rendering::unit_alpha_threshold) {
-    for (const auto & swatch : swatches_) {
-      swatch->setDepthWriteEnabled(!draw_under);
-    }
+  for (const auto & swatch : swatches_) {
+    swatch->setDepthWriteEnabled(!draw_under);
   }
 
   uint8_t group = draw_under ? Ogre::RENDER_QUEUE_4 : Ogre::RENDER_QUEUE_MAIN;
@@ -147,10 +125,6 @@ void AttentionGridDisplay::updateDrawUnder()
   }
 }
 
-void AttentionGridDisplay::updateAlphaThreshold()
-{
-  updatePalette();
-}
 
 void AttentionGridDisplay::clear()
 {
@@ -327,9 +301,6 @@ void AttentionGridDisplay::updatePalette()
   }
 
   int colormap_index = colormap_property_->getOptionInt();
-  float alpha_threshold = alpha_threshold_property_->getFloat();
-  float max_value = colormap_max_value_property_->getFloat();
-  bool use_alpha = use_alpha_transparency_->getBool();
   
   std::string colormap_name;
   switch (colormap_index) {
@@ -341,8 +312,7 @@ void AttentionGridDisplay::updatePalette()
     case 5: default: colormap_name = "grayscale"; break;
   }
   
-  std::vector<unsigned char> palette_bytes = createAdvancedPalette(
-    colormap_name, use_alpha ? alpha_threshold : 0.0f, max_value);
+  std::vector<unsigned char> palette_bytes = createAdvancedPalette(colormap_name);
   
   // Create palette texture
   Ogre::DataStreamPtr palette_stream;
@@ -369,7 +339,6 @@ void AttentionGridDisplay::updatePalette()
     palette_tex_unit->setTextureFiltering(Ogre::TFO_NONE);
   }
 
-  updateAlpha();
   updateDrawUnder();
 }
 
@@ -411,47 +380,40 @@ void AttentionGridDisplay::update(float wall_dt, float ros_dt)
 }
 
 // Advanced colormap creation functions
-std::vector<unsigned char> AttentionGridDisplay::createAdvancedPalette(
-  const std::string& colormap_name, float alpha_threshold, float max_value)
+std::vector<unsigned char> AttentionGridDisplay::createAdvancedPalette(const std::string& colormap_name)
 {
   if (colormap_name == "jet") {
-    return createJetPalette(alpha_threshold);
+    return createJetPalette();
   } else if (colormap_name == "hot") {
-    return createHotPalette(alpha_threshold);
+    return createHotPalette();
   } else if (colormap_name == "magma") {
-    return createMagmaPalette(alpha_threshold);
+    return createMagmaPalette();
   } else if (colormap_name == "viridis") {
-    return createViridsPalette(alpha_threshold);
+    return createViridsPalette();
   } else if (colormap_name == "plasma") {
-    return createPlasmaPalette(alpha_threshold);
+    return createPlasmaPalette();
   } else {
     // Default grayscale
     std::vector<unsigned char> palette(256 * 4);
     for (int i = 0; i < 256; ++i) {
       unsigned char gray = i;
-      unsigned char alpha = 255;
-      
-      // Apply alpha transparency for low values
-      if (alpha_threshold > 0.0f && i < static_cast<int>(alpha_threshold * 255)) {
-        alpha = static_cast<unsigned char>((i / (alpha_threshold * 255)) * 255);
-      }
       
       palette[i * 4 + 0] = gray;  // R
       palette[i * 4 + 1] = gray;  // G
       palette[i * 4 + 2] = gray;  // B
-      palette[i * 4 + 3] = alpha; // A
+      palette[i * 4 + 3] = 255;   // A
     }
     return palette;
   }
 }
 
-std::vector<unsigned char> AttentionGridDisplay::createJetPalette(float alpha_threshold)
+std::vector<unsigned char> AttentionGridDisplay::createJetPalette()
 {
   std::vector<unsigned char> palette(256 * 4);
   
   for (int i = 0; i < 256; ++i) {
-    float x = i / 255.0f;
-    unsigned char r, g, b, a = 255;
+    float x = i / 100.0f;  // Normalized position in palette (0-1), max = 100
+    unsigned char r, g, b;
     
     // Jet colormap calculation
     if (x < 0.125f) {
@@ -476,27 +438,22 @@ std::vector<unsigned char> AttentionGridDisplay::createJetPalette(float alpha_th
       b = 0;
     }
     
-    // Apply alpha transparency for low values
-    if (alpha_threshold > 0.0f && x < alpha_threshold) {
-      a = static_cast<unsigned char>((x / alpha_threshold) * 255.0f);
-    }
-    
     palette[i * 4 + 0] = r;
     palette[i * 4 + 1] = g;
     palette[i * 4 + 2] = b;
-    palette[i * 4 + 3] = a;
+    palette[i * 4 + 3] = 255;
   }
   
   return palette;
 }
 
-std::vector<unsigned char> AttentionGridDisplay::createHotPalette(float alpha_threshold)
+std::vector<unsigned char> AttentionGridDisplay::createHotPalette()
 {
   std::vector<unsigned char> palette(256 * 4);
   
   for (int i = 0; i < 256; ++i) {
-    float x = i / 255.0f;
-    unsigned char r, g, b, a = 255;
+    float x = i / 100.0f;  // Normalized position in palette (0-1), max = 100
+    unsigned char r, g, b;
     
     // Hot colormap calculation
     if (x < 0.4f) {
@@ -513,103 +470,87 @@ std::vector<unsigned char> AttentionGridDisplay::createHotPalette(float alpha_th
       b = static_cast<unsigned char>(255.0f * (x - 0.8f) / 0.2f);
     }
     
-    // Apply alpha transparency for low values
-    if (alpha_threshold > 0.0f && x < alpha_threshold) {
-      a = static_cast<unsigned char>((x / alpha_threshold) * 255.0f);
-    }
-    
     palette[i * 4 + 0] = r;
     palette[i * 4 + 1] = g;
     palette[i * 4 + 2] = b;
-    palette[i * 4 + 3] = a;
+    palette[i * 4 + 3] = 255;
   }
   
   return palette;
 }
 
-std::vector<unsigned char> AttentionGridDisplay::createMagmaPalette(float alpha_threshold)
+std::vector<unsigned char> AttentionGridDisplay::createMagmaPalette()
 {
   std::vector<unsigned char> palette(256 * 4);
+  // Note: max_value no longer used since we switched to swatch-based visibility
   
   // Magma colormap approximation
   for (int i = 0; i < 256; ++i) {
-    float x = i / 255.0f;
-    unsigned char r, g, b, a = 255;
+    float x = i / 100.0f;  // Normalized position in palette (0-1), max = 100
+    unsigned char r, g, b;
     
     // Simplified magma colormap
     r = static_cast<unsigned char>(255.0f * std::min(1.0f, std::max(0.0f, 1.5f * x - 0.2f)));
     g = static_cast<unsigned char>(255.0f * std::min(1.0f, std::max(0.0f, 2.0f * x - 0.8f)));
     b = static_cast<unsigned char>(255.0f * std::min(1.0f, std::max(0.0f, 1.2f * x)));
     
-    // Apply alpha transparency for low values
-    if (alpha_threshold > 0.0f && x < alpha_threshold) {
-      a = static_cast<unsigned char>((x / alpha_threshold) * 255.0f);
-    }
-    
     palette[i * 4 + 0] = r;
     palette[i * 4 + 1] = g;
     palette[i * 4 + 2] = b;
-    palette[i * 4 + 3] = a;
+    palette[i * 4 + 3] = 255;
   }
   
   return palette;
 }
 
-std::vector<unsigned char> AttentionGridDisplay::createViridsPalette(float alpha_threshold)
+std::vector<unsigned char> AttentionGridDisplay::createViridsPalette()
 {
   std::vector<unsigned char> palette(256 * 4);
+  // Note: max_value no longer used since we switched to swatch-based visibility
   
   // Viridis colormap approximation
   for (int i = 0; i < 256; ++i) {
-    float x = i / 255.0f;
-    unsigned char r, g, b, a = 255;
+    float x = i / 100.0f;  // Normalized position in palette (0-1), max = 100
+    unsigned char r, g, b;
     
     // Simplified viridis colormap
     r = static_cast<unsigned char>(255.0f * (0.1f + 0.6f * x));
     g = static_cast<unsigned char>(255.0f * x);
     b = static_cast<unsigned char>(255.0f * (0.9f - 0.3f * x));
     
-    // Apply alpha transparency for low values
-    if (alpha_threshold > 0.0f && x < alpha_threshold) {
-      a = static_cast<unsigned char>((x / alpha_threshold) * 255.0f);
-    }
-    
     palette[i * 4 + 0] = r;
     palette[i * 4 + 1] = g;
     palette[i * 4 + 2] = b;
-    palette[i * 4 + 3] = a;
+    palette[i * 4 + 3] = 255;
   }
   
   return palette;
 }
 
-std::vector<unsigned char> AttentionGridDisplay::createPlasmaPalette(float alpha_threshold)
+std::vector<unsigned char> AttentionGridDisplay::createPlasmaPalette()
 {
   std::vector<unsigned char> palette(256 * 4);
+  // Note: max_value no longer used since we switched to swatch-based visibility
   
   // Plasma colormap approximation
   for (int i = 0; i < 256; ++i) {
-    float x = i / 255.0f;
-    unsigned char r, g, b, a = 255;
+    float x = i / 100.0f;  // Normalized position in palette (0-1), max = 100
+    unsigned char r, g, b;
     
     // Simplified plasma colormap
     r = static_cast<unsigned char>(255.0f * (0.8f + 0.2f * std::sin(3.14159f * x)));
     g = static_cast<unsigned char>(255.0f * (0.3f + 0.7f * x));
     b = static_cast<unsigned char>(255.0f * std::max(0.0f, 1.0f - 2.0f * x));
     
-    // Apply alpha transparency for low values
-    if (alpha_threshold > 0.0f && x < alpha_threshold) {
-      a = static_cast<unsigned char>((x / alpha_threshold) * 255.0f);
-    }
-    
     palette[i * 4 + 0] = r;
     palette[i * 4 + 1] = g;
     palette[i * 4 + 2] = b;
-    palette[i * 4 + 3] = a;
+    palette[i * 4 + 3] = 255;
   }
   
   return palette;
 }
+
 
 }  // namespace displays
 }  // namespace perception_msgs

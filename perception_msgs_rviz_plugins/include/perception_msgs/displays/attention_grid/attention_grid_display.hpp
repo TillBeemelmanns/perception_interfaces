@@ -106,19 +106,16 @@ private:
   void transformMap();
   void resetSwatchesIfNecessary(size_t width, size_t height, float resolution);
   
-  std::vector<unsigned char> createAdvancedPalette(const std::string& colormap_name, float alpha_threshold, float max_value);
-  std::vector<unsigned char> createJetPalette(float alpha_threshold);
-  std::vector<unsigned char> createHotPalette(float alpha_threshold);
-  std::vector<unsigned char> createMagmaPalette(float alpha_threshold);
-  std::vector<unsigned char> createViridsPalette(float alpha_threshold);
-  std::vector<unsigned char> createPlasmaPalette(float alpha_threshold);
+  std::vector<unsigned char> createAdvancedPalette(const std::string& colormap_name);
+  std::vector<unsigned char> createJetPalette();
+  std::vector<unsigned char> createHotPalette();
+  std::vector<unsigned char> createMagmaPalette();
+  std::vector<unsigned char> createViridsPalette();
+  std::vector<unsigned char> createPlasmaPalette();
 
   // Properties
   rviz_common::properties::EnumProperty *colormap_property_;
-  rviz_common::properties::FloatProperty *alpha_threshold_property_;
-  rviz_common::properties::FloatProperty *colormap_max_value_property_;
   rviz_common::properties::BoolProperty *draw_under_property_;
-  rviz_common::properties::BoolProperty *use_alpha_transparency_;
   
   // Read-only properties
   rviz_common::properties::FloatProperty *resolution_property_;
