@@ -264,7 +264,14 @@ void AttentionVectorDisplay::createArrow(
     scene_manager_->createManualObject());
   
   // Create a material that supports alpha blending
-  std::string material_name = "AttentionArrowMaterial_" + std::to_string(reinterpret_cast<uintptr_t>(arrow_object.get()));
+  static int material_counter = 0;
+  std::string material_name = "AttentionArrowMaterial_" + std::to_string(material_counter++);
+  
+  // Check if material already exists and remove it to avoid conflicts
+  if (Ogre::MaterialManager::getSingleton().resourceExists(material_name)) {
+    Ogre::MaterialManager::getSingleton().remove(material_name);
+  }
+  
   Ogre::MaterialPtr material = Ogre::MaterialManager::getSingleton().create(material_name, Ogre::ResourceGroupManager::DEFAULT_RESOURCE_GROUP_NAME);
   material->setReceiveShadows(false);
   material->getTechnique(0)->setLightingEnabled(false);
@@ -433,7 +440,14 @@ void AttentionVectorDisplay::createRangeVisualization(const AggregatedRange& ran
     scene_manager_->createManualObject());
   
   // Create a material that supports alpha blending
-  std::string material_name = "AttentionRangeMaterial_" + std::to_string(reinterpret_cast<uintptr_t>(range_object.get()));
+  static int range_material_counter = 0;
+  std::string material_name = "AttentionRangeMaterial_" + std::to_string(range_material_counter++);
+  
+  // Check if material already exists and remove it to avoid conflicts
+  if (Ogre::MaterialManager::getSingleton().resourceExists(material_name)) {
+    Ogre::MaterialManager::getSingleton().remove(material_name);
+  }
+  
   Ogre::MaterialPtr material = Ogre::MaterialManager::getSingleton().create(material_name, Ogre::ResourceGroupManager::DEFAULT_RESOURCE_GROUP_NAME);
   material->setReceiveShadows(false);
   material->getTechnique(0)->setLightingEnabled(false);
