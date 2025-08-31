@@ -55,4 +55,26 @@
     <message_type>nav_msgs/msg/OccupancyGrid</message_type>
   </class>
 
+  <class
+    name="AttentionCompass"
+    type="perception_msgs::displays::AttentionCompassDisplay"
+    base_class_type="rviz_common::Display"
+  >
+    <description>
+      Futuristic compass overlay showing AI attention in 8 directional sectors around the ego vehicle.
+    </description>
+    <message_type>perception_msgs/msg/ObjectList</message_type>
+  </class>
+
+  <class
+    name="AttentionHUD"
+    type="perception_msgs::displays::AttentionHUDDisplay"
+    base_class_type="rviz_common::Display"
+  >
+    <description>
+      Large futuristic HUD overlay with animated trapezoidal elements showing AI attention directions.
+    </description>
+    <message_type>perception_msgs/msg/ObjectList</message_type>
+  </class>
+
 </library>

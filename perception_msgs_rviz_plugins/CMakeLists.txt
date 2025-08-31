@@ -38,6 +38,8 @@ if(${ROS_VERSION} EQUAL 2)
     include/perception_msgs/displays/traffic_light/traffic_light_display.hpp
     include/perception_msgs/displays/attention_vector/attention_vector_display.hpp
     include/perception_msgs/displays/attention_grid/attention_grid_display.hpp
+    include/perception_msgs/displays/attention_compass/attention_compass_display.hpp
+    include/perception_msgs/displays/attention_hud/attention_hud_display.hpp
   )
 
   foreach(header "${display_headers_to_moc}")
@@ -51,6 +53,8 @@ if(${ROS_VERSION} EQUAL 2)
     src/displays/attention_vector/attention_vector_display.cpp
     src/displays/attention_grid/attention_grid_display.cpp
     src/displays/attention_grid/attention_swatch.cpp
+    src/displays/attention_compass/attention_compass_display.cpp
+    src/displays/attention_hud/attention_hud_display.cpp
   )
 
   add_library(${PROJECT_NAME} SHARED
