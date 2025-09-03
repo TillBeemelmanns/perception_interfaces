@@ -24,6 +24,8 @@ SOFTWARE.
 
 #pragma once
 
+#include <string>
+
 #include "perception_msgs/msg/ego_data.hpp"
 #include "perception_msgs/rendering/object_state/object_state.hpp"
 #include "perception_msgs_utils/object_access.hpp"
@@ -75,6 +77,7 @@ class EgoDataDisplay : public rviz_common::MessageFilterDisplay<perception_msgs:
   void processMessage(perception_msgs::msg::EgoData::ConstSharedPtr msg) override;
 
   Ogre::ManualObject *manual_object_;
+  std::string trajectory_material_name_ = "EgoTrajectory/ThickLine";
 
   // Properties
   // General
