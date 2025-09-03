@@ -32,6 +32,7 @@ SOFTWARE.
 #include <OgreEntity.h>
 #include <OgreMaterial.h>
 #include <OgreMaterialManager.h>
+#include <OgreManualObject.h>
 #include <OgreMovableObject.h>
 #include <OgrePrerequisites.h>
 #include <OgreQuaternion.h>
@@ -68,7 +69,17 @@ ObjectState::ObjectState(const std::unordered_map<unsigned int, Ogre::ColourValu
   text_color_ = text_color;
 }
 
-ObjectState::~ObjectState() { scene_manager_->destroySceneNode(scene_node_); }
+ObjectState::~ObjectState() {
+  if (hoverboard_mo_) {
+    scene_manager_->destroyManualObject(hoverboard_mo_);
+    hoverboard_mo_ = nullptr;
+  }
+  if (hoverboard_glow_mo_) {
+    scene_manager_->destroyManualObject(hoverboard_glow_mo_);
+    hoverboard_glow_mo_ = nullptr;
+  }
+  scene_manager_->destroySceneNode(scene_node_);
+}
 
 void ObjectState::setObjectState(const perception_msgs::msg::ObjectState& state) {
   object_state_ = state;
@@ -168,6 +179,15 @@ void ObjectState::setVisualizeDirectionIndicator(const bool& val) { indicate_dir
 void ObjectState::setVisualizeBoundingBox(const bool& val) { visualize_bounding_box_ = val; }
 
 void ObjectState::setVisualizeMesh(const bool& val) { visualize_mesh_ = val; }
+
+void ObjectState::setVisualizeHoverboard(const bool& val) { visualize_hoverboard_ = val; }
+void ObjectState::setHoverboardThickness(const float& val) { hoverboard_thickness_ = std::max(0.0f, val); }
+void ObjectState::setHoverboardCornerRadius(const float& val) { hoverboard_corner_radius_ = std::max(0.0f, val); }
+void ObjectState::setHoverboardGlow(const bool& val) { hoverboard_glow_ = val; }
+void ObjectState::setHoverboardGlowParams(const float& height, const float& intensity) {
+  hoverboard_glow_height_ = std::max(0.0f, height);
+  hoverboard_glow_intensity_ = std::max(0.0f, std::min(1.0f, intensity));
+}
 
 void ObjectState::setVisualizeVelocity(const bool& val) { visualize_velocity_ = val; }
 
@@ -369,6 +389,146 @@ void ObjectState::setObjectStateVizDefault(const perception_msgs::msg::ObjectSta
     Ogre::Vector3 cone_pos(((bbox_dims_.x - cone_length) / 2.0), 0.0, 0.0);
     bbox_cone_->setOrientation(Ogre::Quaternion(Ogre::Degree(-90), Ogre::Vector3::UNIT_Z));
     bbox_cone_->setPosition(cone_pos);
+  }
+
+  // Hoverboard tile (rounded rectangle with optional upward glow)
+  if (visualize_hoverboard_) {
+    // Create tile and glow materials if missing
+    if (!Ogre::MaterialManager::getSingleton().resourceExists(hoverboard_material_name_)) {
+      Ogre::MaterialPtr mat = Ogre::MaterialManager::getSingleton().create(
+          hoverboard_material_name_, Ogre::ResourceGroupManager::DEFAULT_RESOURCE_GROUP_NAME);
+      if (!mat.isNull()) {
+        Ogre::Technique* tech = mat->getTechnique(0);
+        if (!tech) tech = mat->createTechnique();
+        Ogre::Pass* pass = tech->getPass(0);
+        if (!pass) pass = tech->createPass();
+        pass->setLightingEnabled(false);
+        pass->setDepthCheckEnabled(true);
+        pass->setDepthWriteEnabled(true);
+        pass->setCullingMode(Ogre::CULL_NONE);
+        pass->setSceneBlending(Ogre::SBT_TRANSPARENT_ALPHA);
+        pass->setVertexColourTracking(Ogre::TVC_DIFFUSE);
+      }
+    }
+    if (!Ogre::MaterialManager::getSingleton().resourceExists(hoverboard_glow_material_name_)) {
+      Ogre::MaterialPtr mat = Ogre::MaterialManager::getSingleton().create(
+          hoverboard_glow_material_name_, Ogre::ResourceGroupManager::DEFAULT_RESOURCE_GROUP_NAME);
+      if (!mat.isNull()) {
+        Ogre::Technique* tech = mat->getTechnique(0);
+        if (!tech) tech = mat->createTechnique();
+        Ogre::Pass* pass = tech->getPass(0);
+        if (!pass) pass = tech->createPass();
+        pass->setLightingEnabled(false);
+        pass->setDepthCheckEnabled(true);
+        pass->setDepthWriteEnabled(false);
+        pass->setCullingMode(Ogre::CULL_NONE);
+        pass->setSceneBlending(Ogre::SBT_ADD);
+        pass->setVertexColourTracking(Ogre::TVC_DIFFUSE);
+      }
+    }
+
+    // Ensure manual objects exist
+    if (!hoverboard_mo_) {
+      hoverboard_mo_ = scene_manager_->createManualObject();
+      hoverboard_mo_->setDynamic(true);
+      scene_node_->attachObject(hoverboard_mo_);
+    }
+    if (!hoverboard_glow_mo_) {
+      hoverboard_glow_mo_ = scene_manager_->createManualObject();
+      hoverboard_glow_mo_->setDynamic(true);
+      scene_node_->attachObject(hoverboard_glow_mo_);
+    }
+
+    // Dimensions and radius clamp
+    const float L = static_cast<float>(bbox_dims_.x);
+    const float W = static_cast<float>(bbox_dims_.y);
+    float r = hoverboard_corner_radius_;
+    const float rmax = 0.5f * std::min(L, W) - 1e-3f;
+    if (r > rmax) r = std::max(0.0f, rmax);
+    const int seg = 12;
+    const float zBot = static_cast<float>(-0.5 * bbox_dims_.z);
+    const float zTop = zBot + hoverboard_thickness_;
+
+    std::vector<Ogre::Vector3> boundary;
+    boundary.reserve(4 * (seg + 1));
+    auto arc = [&](float cx, float cy, float a0, float a1) {
+      for (int i = 0; i <= seg; ++i) {
+        float t = static_cast<float>(i) / static_cast<float>(seg);
+        float a = a0 + t * (a1 - a0);
+        boundary.emplace_back(cx + r * std::cos(a), cy + r * std::sin(a), zTop);
+      }
+    };
+    const float hx = 0.5f * L - r;
+    const float hy = 0.5f * W - r;
+    const float PI = static_cast<float>(Ogre::Math::PI);
+    const float HALF_PI = static_cast<float>(Ogre::Math::HALF_PI);
+    arc(+hx, +hy, 0.0f, HALF_PI);
+    arc(-hx, +hy, HALF_PI, PI);
+    arc(-hx, -hy, PI, static_cast<float>(1.5) * PI);
+    arc(+hx, -hy, static_cast<float>(1.5) * PI, 2.0f * PI);
+
+    Ogre::ColourValue tile_col = color;
+
+    // Build tile
+    hoverboard_mo_->clear();
+    hoverboard_mo_->begin(hoverboard_material_name_, Ogre::RenderOperation::OT_TRIANGLE_LIST);
+    // top face
+    Ogre::Vector3 cTop(0, 0, zTop);
+    for (size_t i = 0; i < boundary.size(); ++i) {
+      const Ogre::Vector3 &p0 = boundary[i];
+      const Ogre::Vector3 &p1 = boundary[(i + 1) % boundary.size()];
+      hoverboard_mo_->position(cTop); hoverboard_mo_->colour(tile_col);
+      hoverboard_mo_->position(p0);   hoverboard_mo_->colour(tile_col);
+      hoverboard_mo_->position(p1);   hoverboard_mo_->colour(tile_col);
+    }
+    // sides
+    for (size_t i = 0; i < boundary.size(); ++i) {
+      Ogre::Vector3 t0 = boundary[i];
+      Ogre::Vector3 t1 = boundary[(i + 1) % boundary.size()];
+      Ogre::Vector3 b0(t0.x, t0.y, zBot);
+      Ogre::Vector3 b1(t1.x, t1.y, zBot);
+      hoverboard_mo_->position(t0); hoverboard_mo_->colour(tile_col);
+      hoverboard_mo_->position(b0); hoverboard_mo_->colour(tile_col);
+      hoverboard_mo_->position(b1); hoverboard_mo_->colour(tile_col);
+
+      hoverboard_mo_->position(t0); hoverboard_mo_->colour(tile_col);
+      hoverboard_mo_->position(b1); hoverboard_mo_->colour(tile_col);
+      hoverboard_mo_->position(t1); hoverboard_mo_->colour(tile_col);
+    }
+    hoverboard_mo_->end();
+
+    // Glow skirt
+    hoverboard_glow_mo_->clear();
+    if (hoverboard_glow_ && hoverboard_glow_height_ > 1e-4f && hoverboard_glow_intensity_ > 1e-4f) {
+      Ogre::ColourValue cBottom = tile_col;
+      cBottom.r *= hoverboard_glow_intensity_;
+      cBottom.g *= hoverboard_glow_intensity_;
+      cBottom.b *= hoverboard_glow_intensity_;
+      Ogre::ColourValue cTop = cBottom; cTop.a = 0.0f;
+      hoverboard_glow_mo_->begin(hoverboard_glow_material_name_, Ogre::RenderOperation::OT_TRIANGLE_LIST);
+      const float zG0 = zTop;
+      const float zG1 = zTop + hoverboard_glow_height_;
+      for (size_t i = 0; i < boundary.size(); ++i) {
+        Ogre::Vector3 e0 = boundary[i];
+        Ogre::Vector3 e1 = boundary[(i + 1) % boundary.size()];
+        Ogre::Vector3 g0(e0.x, e0.y, zG0);
+        Ogre::Vector3 g1(e1.x, e1.y, zG0);
+        Ogre::Vector3 g2(e1.x, e1.y, zG1);
+        Ogre::Vector3 g3(e0.x, e0.y, zG1);
+        hoverboard_glow_mo_->position(g0); hoverboard_glow_mo_->colour(cBottom);
+        hoverboard_glow_mo_->position(g1); hoverboard_glow_mo_->colour(cBottom);
+        hoverboard_glow_mo_->position(g2); hoverboard_glow_mo_->colour(cTop);
+
+        hoverboard_glow_mo_->position(g0); hoverboard_glow_mo_->colour(cBottom);
+        hoverboard_glow_mo_->position(g2); hoverboard_glow_mo_->colour(cTop);
+        hoverboard_glow_mo_->position(g3); hoverboard_glow_mo_->colour(cTop);
+      }
+      hoverboard_glow_mo_->end();
+    }
+  } else {
+    // cleanup if previously created
+    if (hoverboard_mo_) { scene_manager_->destroyManualObject(hoverboard_mo_); hoverboard_mo_ = nullptr; }
+    if (hoverboard_glow_mo_) { scene_manager_->destroyManualObject(hoverboard_glow_mo_); hoverboard_glow_mo_ = nullptr; }
   }
 
   if (visualize_velocity_) {

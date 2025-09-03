@@ -61,6 +61,18 @@ ObjectListDisplay::ObjectListDisplay()
     "Visualize the object as a mesh.", appearance_properties_);
   viz_bounding_box_ = new rviz_common::properties::BoolProperty("Bounding box", true,
     "Visualize the bounding box of an object.", appearance_properties_);
+  viz_hoverboard_ = new rviz_common::properties::BoolProperty("Hoverboard", false,
+    "Visualize the object as a flat rounded tile.", appearance_properties_);
+  hoverboard_thickness_ = new rviz_common::properties::FloatProperty("HB Thickness [m]", 0.12,
+    "Tile thickness of the hoverboard.", viz_hoverboard_);
+  hoverboard_corner_radius_ = new rviz_common::properties::FloatProperty("HB Corner Radius [m]", 0.35,
+    "Roundness of tile corners.", viz_hoverboard_);
+  hoverboard_glow_ = new rviz_common::properties::BoolProperty("HB Glow", true,
+    "Add an upward glow above the tile.", viz_hoverboard_);
+  hoverboard_glow_height_ = new rviz_common::properties::FloatProperty("HB Glow Height [m]", 0.7,
+    "Height of the glow plume.", hoverboard_glow_);
+  hoverboard_glow_intensity_ = new rviz_common::properties::FloatProperty("HB Glow Intensity [0..1]", 0.6,
+    "Intensity multiplier for glow color.", hoverboard_glow_);
   viz_direction_ind_ = new rviz_common::properties::BoolProperty("Orientation Indication", false,
     "Visualize a cone indicating the direction of an object.", viz_bounding_box_);
   color_property_group_ = new rviz_common::properties::BoolProperty("Classification coloring", true,
@@ -209,6 +221,12 @@ ObjectListDisplay::~ObjectListDisplay()
   delete color_property_unknown_;
   delete enable_timeout_property_;
   delete timeout_property_;
+  delete viz_hoverboard_;
+  delete hoverboard_thickness_;
+  delete hoverboard_corner_radius_;
+  delete hoverboard_glow_;
+  delete hoverboard_glow_height_;
+  delete hoverboard_glow_intensity_;
 }
 
 void ObjectListDisplay::onInitialize()
@@ -406,6 +424,12 @@ void ObjectListDisplay::processMessage(perception_msgs::msg::ObjectList::ConstSh
       state_ptr->setVisualizeDirectionIndicator(visualize_direction_indicator);
       state_ptr->setVisualizeBoundingBox(visualize_bounding_box);
       state_ptr->setVisualizeMesh(visualize_mesh);
+      // Hoverboard settings
+      state_ptr->setVisualizeHoverboard(viz_hoverboard_->getBool());
+      state_ptr->setHoverboardThickness(hoverboard_thickness_->getFloat());
+      state_ptr->setHoverboardCornerRadius(hoverboard_corner_radius_->getFloat());
+      state_ptr->setHoverboardGlow(hoverboard_glow_->getBool());
+      state_ptr->setHoverboardGlowParams(hoverboard_glow_height_->getFloat(), hoverboard_glow_intensity_->getFloat());
       state_ptr->setVisualizeVelocity(visualize_velocity);
       if(visualize_velocity)
       {

@@ -78,6 +78,13 @@ protected:
   // Object Appearance Properties
   rviz_common::properties::Property *appearance_properties_;
   rviz_common::properties::BoolProperty *viz_bounding_box_, *viz_direction_ind_, *viz_mesh_;
+  // Hoverboard appearance
+  rviz_common::properties::BoolProperty *viz_hoverboard_;
+  rviz_common::properties::FloatProperty *hoverboard_thickness_;
+  rviz_common::properties::FloatProperty *hoverboard_corner_radius_;
+  rviz_common::properties::BoolProperty *hoverboard_glow_;
+  rviz_common::properties::FloatProperty *hoverboard_glow_height_;
+  rviz_common::properties::FloatProperty *hoverboard_glow_intensity_;
   // Color by Classification
   rviz_common::properties::BoolProperty *color_property_group_;
   rviz_common::properties::ColorProperty *color_property_pedestrian_;
