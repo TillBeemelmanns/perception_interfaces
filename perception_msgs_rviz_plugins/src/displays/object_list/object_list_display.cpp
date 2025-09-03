@@ -37,6 +37,8 @@ SOFTWARE.
 #include "rviz_common/properties/color_property.hpp"
 #include "rviz_common/properties/float_property.hpp"
 #include "rviz_common/properties/bool_property.hpp"
+#include "rviz_common/properties/enum_property.hpp"
+#include "rviz_common/properties/int_property.hpp"
 #include "rviz_common/properties/parse_color.hpp"
 #include "rviz_common/validate_floats.hpp"
 
@@ -63,10 +65,21 @@ ObjectListDisplay::ObjectListDisplay()
     "Visualize the bounding box of an object.", appearance_properties_);
   viz_hoverboard_ = new rviz_common::properties::BoolProperty("Hoverboard", false,
     "Visualize the object as a flat rounded tile.", appearance_properties_);
-  hoverboard_thickness_ = new rviz_common::properties::FloatProperty("HB Thickness [m]", 0.12,
+  color_property_group_ = new rviz_common::properties::BoolProperty("Classification coloring", true,
+    "Use the object classification to set the color for supported visuals.", appearance_properties_);
+    hoverboard_thickness_ = new rviz_common::properties::FloatProperty("HB Thickness [m]", 0.12,
     "Tile thickness of the hoverboard.", viz_hoverboard_);
   hoverboard_corner_radius_ = new rviz_common::properties::FloatProperty("HB Corner Radius [m]", 0.35,
     "Roundness of tile corners.", viz_hoverboard_);
+  hoverboard_cap_style_ = new rviz_common::properties::EnumProperty("HB Corner Style", "Round",
+    "Corner cap style for hoverboard tile.", viz_hoverboard_);
+  hoverboard_cap_style_->addOption("Square", 0);
+  hoverboard_cap_style_->addOption("Bevel", 1);
+  hoverboard_cap_style_->addOption("Round", 2);
+  hoverboard_corner_segments_ = new rviz_common::properties::IntProperty("HB Round Segments", 12,
+    "Segments per rounded corner (for Round style).", hoverboard_cap_style_);
+  hoverboard_corner_segments_->setMin(3);
+  hoverboard_corner_segments_->setMax(64);
   hoverboard_glow_ = new rviz_common::properties::BoolProperty("HB Glow", true,
     "Add an upward glow above the tile.", viz_hoverboard_);
   hoverboard_glow_height_ = new rviz_common::properties::FloatProperty("HB Glow Height [m]", 0.7,
@@ -75,8 +88,6 @@ ObjectListDisplay::ObjectListDisplay()
     "Intensity multiplier for glow color.", hoverboard_glow_);
   viz_direction_ind_ = new rviz_common::properties::BoolProperty("Orientation Indication", false,
     "Visualize a cone indicating the direction of an object.", viz_bounding_box_);
-  color_property_group_ = new rviz_common::properties::BoolProperty("Classification coloring", true,
-    "Use the object classification to set the color.", viz_bounding_box_);
   // Classification Color Properties
   color_property_pedestrian_ = new rviz_common::properties::ColorProperty(
     "PEDESTRIAN", QColor(25, 255, 255),
@@ -224,6 +235,8 @@ ObjectListDisplay::~ObjectListDisplay()
   delete viz_hoverboard_;
   delete hoverboard_thickness_;
   delete hoverboard_corner_radius_;
+  delete hoverboard_cap_style_;
+  delete hoverboard_corner_segments_;
   delete hoverboard_glow_;
   delete hoverboard_glow_height_;
   delete hoverboard_glow_intensity_;
@@ -428,6 +441,8 @@ void ObjectListDisplay::processMessage(perception_msgs::msg::ObjectList::ConstSh
       state_ptr->setVisualizeHoverboard(viz_hoverboard_->getBool());
       state_ptr->setHoverboardThickness(hoverboard_thickness_->getFloat());
       state_ptr->setHoverboardCornerRadius(hoverboard_corner_radius_->getFloat());
+      state_ptr->setHoverboardCapStyle(hoverboard_cap_style_->getOptionInt());
+      state_ptr->setHoverboardCornerSegments(hoverboard_corner_segments_->getInt());
       state_ptr->setHoverboardGlow(hoverboard_glow_->getBool());
       state_ptr->setHoverboardGlowParams(hoverboard_glow_height_->getFloat(), hoverboard_glow_intensity_->getFloat());
       state_ptr->setVisualizeVelocity(visualize_velocity);

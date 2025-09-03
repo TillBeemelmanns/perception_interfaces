@@ -231,6 +231,8 @@ class ObjectState {
   void setHoverboardCornerRadius(const float& val);
   void setHoverboardGlow(const bool& val);
   void setHoverboardGlowParams(const float& height, const float& intensity);
+  void setHoverboardCapStyle(int style);
+  void setHoverboardCornerSegments(int segs);
 
   /**
    * @brief Set the Bounding Box Dimensions explicitly (e.g. for EgoData where dimensions are not part of the EGO-State-Model)
@@ -454,6 +456,8 @@ class ObjectState {
   bool hoverboard_glow_ = true;
   float hoverboard_glow_height_ = 0.7f;
   float hoverboard_glow_intensity_ = 0.6f;
+  int hoverboard_cap_style_ = 2; // 0=square,1=bevel,2=round
+  int hoverboard_corner_segments_ = 12;
   std::string hoverboard_material_name_ = "ObjectHoverboard/Tile";
   std::string hoverboard_glow_material_name_ = "ObjectHoverboard/Glow";
 

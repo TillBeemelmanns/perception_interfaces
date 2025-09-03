@@ -44,6 +44,7 @@ SOFTWARE.
 #include <OgreVector.h>
 
 #include <cmath>
+#include <algorithm>
 
 #include <rviz_rendering/mesh_loader.hpp>
 #include "rviz_rendering/objects/shape.hpp"
@@ -187,6 +188,14 @@ void ObjectState::setHoverboardGlow(const bool& val) { hoverboard_glow_ = val; }
 void ObjectState::setHoverboardGlowParams(const float& height, const float& intensity) {
   hoverboard_glow_height_ = std::max(0.0f, height);
   hoverboard_glow_intensity_ = std::max(0.0f, std::min(1.0f, intensity));
+}
+
+void ObjectState::setHoverboardCapStyle(int style) {
+  hoverboard_cap_style_ = std::max(0, std::min(2, style));
+}
+
+void ObjectState::setHoverboardCornerSegments(int segs) {
+  hoverboard_corner_segments_ = std::max(3, std::min(64, segs));
 }
 
 void ObjectState::setVisualizeVelocity(const bool& val) { visualize_velocity_ = val; }
@@ -439,19 +448,29 @@ void ObjectState::setObjectStateVizDefault(const perception_msgs::msg::ObjectSta
       scene_node_->attachObject(hoverboard_glow_mo_);
     }
 
-    // Dimensions and radius clamp
+    // Dimensions and corner resolution
     const float L = static_cast<float>(bbox_dims_.x);
     const float W = static_cast<float>(bbox_dims_.y);
     float r = hoverboard_corner_radius_;
     const float rmax = 0.5f * std::min(L, W) - 1e-3f;
     if (r > rmax) r = std::max(0.0f, rmax);
-    const int seg = 12;
+    int seg = (hoverboard_cap_style_ == 2) ? hoverboard_corner_segments_ : 1; // round uses configured segments
     const float zBot = static_cast<float>(-0.5 * bbox_dims_.z);
     const float zTop = zBot + hoverboard_thickness_;
 
     std::vector<Ogre::Vector3> boundary;
     boundary.reserve(4 * (seg + 1));
     auto arc = [&](float cx, float cy, float a0, float a1) {
+      if (hoverboard_cap_style_ == 0) {
+        return; // square handled separately
+      }
+      if (hoverboard_cap_style_ == 1) {
+        // bevel: straight cut between the two edge-offset points
+        boundary.emplace_back(cx + r * std::cos(a0), cy + r * std::sin(a0), zTop);
+        boundary.emplace_back(cx + r * std::cos(a1), cy + r * std::sin(a1), zTop);
+        return;
+      }
+      // round corner
       for (int i = 0; i <= seg; ++i) {
         float t = static_cast<float>(i) / static_cast<float>(seg);
         float a = a0 + t * (a1 - a0);
@@ -460,12 +479,20 @@ void ObjectState::setObjectStateVizDefault(const perception_msgs::msg::ObjectSta
     };
     const float hx = 0.5f * L - r;
     const float hy = 0.5f * W - r;
-    const float PI = static_cast<float>(Ogre::Math::PI);
-    const float HALF_PI = static_cast<float>(Ogre::Math::HALF_PI);
-    arc(+hx, +hy, 0.0f, HALF_PI);
-    arc(-hx, +hy, HALF_PI, PI);
-    arc(-hx, -hy, PI, static_cast<float>(1.5) * PI);
-    arc(+hx, -hy, static_cast<float>(1.5) * PI, 2.0f * PI);
+    if (hoverboard_cap_style_ == 0 || r <= 1e-6f) {
+      // Square corners: rectangle boundary
+      boundary.emplace_back(+0.5f * L, +0.5f * W, zTop);
+      boundary.emplace_back(-0.5f * L, +0.5f * W, zTop);
+      boundary.emplace_back(-0.5f * L, -0.5f * W, zTop);
+      boundary.emplace_back(+0.5f * L, -0.5f * W, zTop);
+    } else {
+      const float PI = static_cast<float>(Ogre::Math::PI);
+      const float HALF_PI = static_cast<float>(Ogre::Math::HALF_PI);
+      arc(+hx, +hy, 0.0f, HALF_PI);      // top-right
+      arc(-hx, +hy, HALF_PI, PI);        // top-left
+      arc(-hx, -hy, PI, 1.5f * PI);      // bottom-left
+      arc(+hx, -hy, 1.5f * PI, 2.0f * PI); // bottom-right
+    }
 
     Ogre::ColourValue tile_col = color;
 
