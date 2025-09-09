@@ -359,7 +359,8 @@ void EgoDataDisplay::processMessage(perception_msgs::msg::EgoData::ConstSharedPt
   size_t num_points = msg->trajectory_planned.size();
   if (viz_trajectory_->getBool()) {
     if (num_points == 0) {
-      // nothing to draw
+      // nothing to draw; avoid constructing vectors with size (num_points - 1)
+      return;
     } else if (num_points == 1) {
       // Draw a disk at the single point so short paths look decent
       const float half_width = 0.5f * msg->width;
