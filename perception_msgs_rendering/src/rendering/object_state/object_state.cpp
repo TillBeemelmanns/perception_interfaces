@@ -137,6 +137,8 @@ void ObjectState::setObjectStatePredictions(
   predictions_ = predictions;
   //Fill billboard_line_predictions_ with empty vectors
   billboard_line_predictions_.clear();
+  text_prob_vector_.clear();
+  bbox_predictions_.clear();
   for (size_t i = 0; i < predictions.size(); i++) {
     billboard_line_predictions_.push_back(std::shared_ptr<rviz_rendering::BillboardLine>());
     text_prob_vector_.push_back(std::shared_ptr<rviz_rendering::MovableText>());
@@ -157,7 +159,7 @@ void ObjectState::setObjectStatePredictions(
     setObjectPredictionsVizDefault(predictions[i].states, billboard_line_predictions_[i], bbox_predictions_[i],
                                    line_color, point_color);
 
-    if (visualize_predictions_ && visualize_prediction_probabilities_) {
+    if (visualize_predictions_ && visualize_prediction_probabilities_ && !predictions[i].states.empty()) {
       setObjectPredictionProbabilityText(predictions[i].probability, predictions[i].states[0], text_prob_vector_[i]);
     }
   }
@@ -269,6 +271,17 @@ void ObjectState::setObjectStateVizDefault(const perception_msgs::msg::ObjectSta
   }
 
   if (visualize_mesh_) {
+    // Clean up any previously created mesh node and its attached objects to avoid leaks
+    if (mesh_node_) {
+      // Detach and destroy all attached movable objects (e.g., entities)
+      while (mesh_node_->numAttachedObjects() > 0) {
+        Ogre::MovableObject* mo = mesh_node_->getAttachedObject(0);
+        mesh_node_->detachObject(mo);
+        scene_manager_->destroyMovableObject(mo);
+      }
+      scene_manager_->destroySceneNode(mesh_node_);
+      mesh_node_ = nullptr;
+    }
     //load mesh to render based on classification
     Ogre::Entity* entity;
     Ogre::MeshPtr mesh;
@@ -714,6 +727,8 @@ void ObjectState::setObjectStateTextDefault(const perception_msgs::msg::ObjectSt
 void ObjectState::setObjectPredictionProbabilityText(const double& probability,
                                                      const perception_msgs::msg::ObjectState& state,
                                                      std::shared_ptr<rviz_rendering::MovableText>& text_prob) {
+  // reset text buffer per prediction label to avoid uncontrolled growth
+  text_probabilities_.clear();
   if (probability >= 0.0) {
     std::ostringstream textStream;
     textStream << std::fixed << std::setprecision(1)
