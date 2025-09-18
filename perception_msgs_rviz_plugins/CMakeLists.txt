@@ -31,6 +31,13 @@ if(${ROS_VERSION} EQUAL 2)
   find_package(tf2_geometry_msgs REQUIRED)
   find_package(nav_msgs REQUIRED)
   find_package(map_msgs REQUIRED)
+  
+  # Conditional resource_retriever for ROS distro compatibility
+  if(NOT ROS_DISTRO STREQUAL "noetic"
+      AND NOT ROS_DISTRO STREQUAL "humble"
+      AND NOT ROS_DISTRO STREQUAL "jazzy")
+    find_package(resource_retriever REQUIRED)
+  endif()
 
   set(display_headers_to_moc
     include/perception_msgs/displays/object_list/object_list_display.hpp
@@ -40,6 +47,8 @@ if(${ROS_VERSION} EQUAL 2)
     include/perception_msgs/displays/attention_grid/attention_grid_display.hpp
     include/perception_msgs/displays/attention_compass/attention_compass_display.hpp
     include/perception_msgs/displays/attention_hud/attention_hud_display.hpp
+    include/perception_msgs/displays/attention_aura3d/attention_aura3d_display.hpp
+    include/perception_msgs/displays/attention_cloud/attention_cloud_display.hpp
   )
 
   foreach(header "${display_headers_to_moc}")
@@ -55,6 +64,8 @@ if(${ROS_VERSION} EQUAL 2)
     src/displays/attention_grid/attention_swatch.cpp
     src/displays/attention_compass/attention_compass_display.cpp
     src/displays/attention_hud/attention_hud_display.cpp
+    src/displays/attention_aura3d/attention_aura3d_display.cpp
+    src/displays/attention_cloud/attention_cloud_display.cpp
   )
 
   add_library(${PROJECT_NAME} SHARED
@@ -90,6 +101,13 @@ if(${ROS_VERSION} EQUAL 2)
     map_msgs
   )
 
+  # Conditional resource_retriever target dependencies
+  if(NOT ROS_DISTRO STREQUAL "noetic"
+      AND NOT ROS_DISTRO STREQUAL "humble"
+      AND NOT ROS_DISTRO STREQUAL "jazzy")
+    ament_target_dependencies(${PROJECT_NAME} PUBLIC resource_retriever)
+  endif()
+
   # Export modern CMake targets
   ament_export_targets(${PROJECT_NAME} HAS_LIBRARY_TARGET)
 
@@ -105,6 +123,26 @@ if(${ROS_VERSION} EQUAL 2)
     tf2_ros
     nav_msgs
     map_msgs
+  )
+
+  # Conditional resource_retriever export dependencies
+  if(NOT ROS_DISTRO STREQUAL "noetic"
+      AND NOT ROS_DISTRO STREQUAL "humble"
+      AND NOT ROS_DISTRO STREQUAL "jazzy")
+    ament_export_dependencies(resource_retriever)
+  endif()
+
+  # Adds shallow folders containing ogre_media such as meshes and scripts to Rviz
+  # so that they can be found at runtime. Requires rviz_rendering.
+  register_rviz_ogre_media_exports(
+    DIRECTORIES
+    "meshes"
+  )
+
+  # Install mesh files
+  install(
+    DIRECTORY meshes/
+    DESTINATION share/${PROJECT_NAME}/meshes
   )
 
   install(
