@@ -70,6 +70,27 @@ AttentionAura3DDisplay::AttentionAura3DDisplay()
     "Show directional labels (N, NE, E, etc.)",
     this, SLOT(updateAuraProperties()));
 
+  position_x_offset_property_ = new rviz_common::properties::FloatProperty(
+    "Position X Offset", 0.0f,
+    "Manual X offset for the aura center (meters)",
+    this, SLOT(updateAuraProperties()));
+  position_x_offset_property_->setMin(-10.0f);
+  position_x_offset_property_->setMax(10.0f);
+
+  position_y_offset_property_ = new rviz_common::properties::FloatProperty(
+    "Position Y Offset", 0.0f,
+    "Manual Y offset for the aura center (meters)",
+    this, SLOT(updateAuraProperties()));
+  position_y_offset_property_->setMin(-10.0f);
+  position_y_offset_property_->setMax(10.0f);
+
+  position_z_offset_property_ = new rviz_common::properties::FloatProperty(
+    "Position Z Offset", 0.0f,
+    "Manual Z offset for the aura center (meters)",
+    this, SLOT(updateAuraProperties()));
+  position_z_offset_property_->setMin(-5.0f);
+  position_z_offset_property_->setMax(5.0f);
+
   // Initialize sectors with base visibility for debugging
   for (auto& sector : sectors_) {
     sector.attention_level = 0.0f;
@@ -83,6 +104,17 @@ AttentionAura3DDisplay::AttentionAura3DDisplay()
 AttentionAura3DDisplay::~AttentionAura3DDisplay()
 {
   destroyAuraElements();
+
+  delete radius_property_;
+  delete thickness_property_;
+  delete color_property_;
+  delete border_color_property_;
+  delete alpha_property_;
+  delete frame_property_;
+  delete show_labels_property_;
+  delete position_x_offset_property_;
+  delete position_y_offset_property_;
+  delete position_z_offset_property_;
 }
 
 void AttentionAura3DDisplay::onInitialize()
@@ -96,6 +128,7 @@ void AttentionAura3DDisplay::reset()
   MessageFilterDisplay::reset();
   destroyAuraElements();
   createAuraElements();
+  has_last_pose_ = false;
 }
 
 void AttentionAura3DDisplay::processMessage(const perception_msgs::msg::ObjectList::ConstSharedPtr msg)
@@ -113,8 +146,11 @@ void AttentionAura3DDisplay::processMessage(const perception_msgs::msg::ObjectLi
   }
   setTransformOk();
 
-  scene_node_->setPosition(position);
-  scene_node_->setOrientation(orientation);
+  last_position_ = position;
+  last_orientation_ = orientation;
+  has_last_pose_ = true;
+
+  applySceneNodeTransform(position, orientation);
 
   analyzeSectors(msg);
   updateAura();
@@ -208,7 +244,8 @@ void AttentionAura3DDisplay::createAuraElements()
   for (int i = 0; i < NUM_SECTORS; ++i) {
     // Create scene node
     std::string node_name = "attention_aura3d_node_" + std::to_string(material_counter_) + "_" + std::to_string(i);
-    Ogre::SceneNode* node = scene_manager->getRootSceneNode()->createChildSceneNode(node_name);
+    Ogre::SceneNode* parent = scene_node_ ? scene_node_ : scene_manager->getRootSceneNode();
+    Ogre::SceneNode* node = parent->createChildSceneNode(node_name);
     sector_nodes_.push_back(node);
 
     // Create manual object for trapezoidal geometry
@@ -266,6 +303,9 @@ void AttentionAura3DDisplay::destroyAuraElements()
   for (auto* node : sector_nodes_) {
     if (node) {
       try {
+        if (node->getParentSceneNode()) {
+          node->getParentSceneNode()->removeChild(node);
+        }
         scene_manager->destroySceneNode(node);
       } catch (...) {
         // Ignore destruction errors
@@ -447,7 +487,27 @@ void AttentionAura3DDisplay::updateAnimations()
 
 void AttentionAura3DDisplay::updateAuraProperties()
 {
+  if (has_last_pose_) {
+    applySceneNodeTransform(last_position_, last_orientation_);
+  }
   updateAura();
+}
+
+void AttentionAura3DDisplay::applySceneNodeTransform(const Ogre::Vector3& position, const Ogre::Quaternion& orientation)
+{
+  if (!scene_node_) {
+    return;
+  }
+
+  float x_offset = position_x_offset_property_->getFloat();
+  float y_offset = position_y_offset_property_->getFloat();
+  float z_offset = position_z_offset_property_->getFloat();
+
+  Ogre::Vector3 offset(x_offset, y_offset, z_offset);
+  Ogre::Vector3 world_offset = orientation * offset;
+
+  scene_node_->setPosition(position + world_offset);
+  scene_node_->setOrientation(orientation);
 }
 
 } // namespace displays

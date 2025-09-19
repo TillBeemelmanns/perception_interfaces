@@ -196,10 +196,10 @@ void AttentionCompassDisplay::createHUDOverlay()
 {
   // Create unique names
   static int hud_counter = 0;
-  std::string overlay_name = "AttentionHUDOverlay" + std::to_string(hud_counter);
-  std::string panel_name = "AttentionHUDPanel" + std::to_string(hud_counter);
-  std::string texture_name = "AttentionHUDTexture" + std::to_string(hud_counter);
-  std::string material_name = "AttentionHUDMaterial" + std::to_string(hud_counter);
+  std::string overlay_name = "AttentionCompassOverlay" + std::to_string(hud_counter);
+  std::string panel_name = "AttentionCompassPanel" + std::to_string(hud_counter);
+  std::string texture_name = "AttentionCompassTexture" + std::to_string(hud_counter);
+  std::string material_name = "AttentionCompassMaterial" + std::to_string(hud_counter);
   hud_counter++;
   
   // Create overlay

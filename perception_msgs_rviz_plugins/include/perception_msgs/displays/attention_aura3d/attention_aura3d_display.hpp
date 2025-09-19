@@ -8,6 +8,10 @@
 #include <OgreSceneNode.h>
 #include <OgreManualObject.h>
 #include <OgreMaterial.h>
+#include <OgreVector3.h>
+#include <OgreQuaternion.h>
+
+#include <chrono>
 
 #include <rviz_common/message_filter_display.hpp>
 #include <rviz_common/properties/float_property.hpp>
@@ -65,6 +69,9 @@ private:
   rviz_common::properties::FloatProperty* alpha_property_;
   rviz_common::properties::StringProperty* frame_property_;
   rviz_common::properties::BoolProperty* show_labels_property_;
+  rviz_common::properties::FloatProperty* position_x_offset_property_;
+  rviz_common::properties::FloatProperty* position_y_offset_property_;
+  rviz_common::properties::FloatProperty* position_z_offset_property_;
   
   // 3D Objects
   std::vector<Ogre::SceneNode*> sector_nodes_;
@@ -79,6 +86,12 @@ private:
   // Animation
   void updateAnimations();
   static int material_counter_;
+
+  // Transform helpers
+  void applySceneNodeTransform(const Ogre::Vector3& position, const Ogre::Quaternion& orientation);
+  Ogre::Vector3 last_position_ {Ogre::Vector3::ZERO};
+  Ogre::Quaternion last_orientation_ {Ogre::Quaternion::IDENTITY};
+  bool has_last_pose_ {false};
 
 private Q_SLOTS:
   void updateAuraProperties();
