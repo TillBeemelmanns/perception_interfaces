@@ -34,6 +34,7 @@ SOFTWARE.
 #include <OgreSceneNode.h>
 #include <OgreSharedPtr.h>
 #include <OgreTexture.h>
+#include <OgreRenderQueue.h>
 
 #include "nav_msgs/msg/occupancy_grid.hpp"
 
@@ -59,6 +60,7 @@ public:
   void setVisible(bool visible);
   void setRenderQueueGroup(uint8_t group);
   void setDepthWriteEnabled(bool depth_write_enabled);
+  void setDrawOrder(bool draw_under);
 
   Ogre::Pass * getTechniquePass();
   std::string getTextureName();

@@ -117,11 +117,7 @@ void AttentionGridDisplay::updateDrawUnder()
 
   for (const auto & swatch : swatches_) {
     swatch->setDepthWriteEnabled(!draw_under);
-  }
-
-  uint8_t group = draw_under ? Ogre::RENDER_QUEUE_4 : Ogre::RENDER_QUEUE_MAIN;
-  for (const auto & swatch : swatches_) {
-    swatch->setRenderQueueGroup(group);
+    swatch->setDrawOrder(draw_under);
   }
 }
 

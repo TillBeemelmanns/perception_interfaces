@@ -19,6 +19,7 @@
 #include <rviz_common/properties/string_property.hpp>
 #include <rviz_common/properties/color_property.hpp>
 #include <rviz_common/properties/bool_property.hpp>
+#include <rviz_common/properties/enum_property.hpp>
 
 #include <perception_msgs/msg/object_list.hpp>
 #include "perception_msgs_utils/object_access.hpp"
@@ -53,6 +54,7 @@ private:
   void updateAura();
   void createAuraElements();
   void destroyAuraElements();
+  void updateRenderSettings();
   
   // Helper functions
   int getSectorIndex(float angle_rad) const;
@@ -68,7 +70,8 @@ private:
   rviz_common::properties::ColorProperty* border_color_property_;
   rviz_common::properties::FloatProperty* alpha_property_;
   rviz_common::properties::StringProperty* frame_property_;
-  rviz_common::properties::BoolProperty* show_labels_property_;
+  rviz_common::properties::BoolProperty* draw_in_background_property_;
+  rviz_common::properties::EnumProperty* class_filter_property_;
   rviz_common::properties::FloatProperty* position_x_offset_property_;
   rviz_common::properties::FloatProperty* position_y_offset_property_;
   rviz_common::properties::FloatProperty* position_z_offset_property_;

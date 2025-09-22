@@ -10,6 +10,9 @@
 #include <OgrePass.h>
 #include <OgreTextureUnitState.h>
 #include <OgreColourValue.h>
+#include <OgreRenderQueue.h>
+
+#include <perception_msgs/msg/object_classification.hpp>
 
 #include <rviz_common/display_context.hpp>
 #include <rviz_common/frame_manager_iface.hpp>
@@ -19,6 +22,34 @@ namespace perception_msgs
 {
 namespace displays
 {
+
+namespace
+{
+struct ClassOption
+{
+  const char* label;
+  int value;
+};
+
+constexpr ClassOption kClassOptions[] = {
+  {"All Classes", -1},
+  {"Pedestrian", perception_msgs::msg::ObjectClassification::PEDESTRIAN},
+  {"Bicycle", perception_msgs::msg::ObjectClassification::BICYCLE},
+  {"Motorbike", perception_msgs::msg::ObjectClassification::MOTORBIKE},
+  {"Car", perception_msgs::msg::ObjectClassification::CAR},
+  {"Truck", perception_msgs::msg::ObjectClassification::TRUCK},
+  {"Van", perception_msgs::msg::ObjectClassification::VAN},
+  {"Bus", perception_msgs::msg::ObjectClassification::BUS},
+  {"Animal", perception_msgs::msg::ObjectClassification::ANIMAL},
+  {"Road Obstacle", perception_msgs::msg::ObjectClassification::ROAD_OBSTACLE},
+  {"Train", perception_msgs::msg::ObjectClassification::TRAIN},
+  {"Trailer", perception_msgs::msg::ObjectClassification::TRAILER},
+  {"Car Union", perception_msgs::msg::ObjectClassification::CAR_UNION},
+  {"Truck Union", perception_msgs::msg::ObjectClassification::TRUCK_UNION},
+  {"Bike Union", perception_msgs::msg::ObjectClassification::BIKE_UNION},
+  {"Unknown", perception_msgs::msg::ObjectClassification::UNKNOWN}
+};
+}  // namespace
 
 int AttentionAura3DDisplay::material_counter_ = 0;
 
@@ -65,9 +96,17 @@ AttentionAura3DDisplay::AttentionAura3DDisplay()
     "Reference frame for the aura visualization",
     this, SLOT(updateAuraProperties()));
 
-  show_labels_property_ = new rviz_common::properties::BoolProperty(
-    "Show Labels", false,
-    "Show directional labels (N, NE, E, etc.)",
+  class_filter_property_ = new rviz_common::properties::EnumProperty(
+    "Focus Class", "All Classes",
+    "Only count objects whose highest-probability classification matches this selection.",
+    this, SLOT(updateAuraProperties()));
+  for (const auto& option : kClassOptions) {
+    class_filter_property_->addOption(QString::fromUtf8(option.label), option.value);
+  }
+
+  draw_in_background_property_ = new rviz_common::properties::BoolProperty(
+    "Draw Behind Objects", false,
+    "Render the aura before other scene geometry so only its transparency shines through.",
     this, SLOT(updateAuraProperties()));
 
   position_x_offset_property_ = new rviz_common::properties::FloatProperty(
@@ -111,7 +150,8 @@ AttentionAura3DDisplay::~AttentionAura3DDisplay()
   delete border_color_property_;
   delete alpha_property_;
   delete frame_property_;
-  delete show_labels_property_;
+  delete class_filter_property_;
+  delete draw_in_background_property_;
   delete position_x_offset_property_;
   delete position_y_offset_property_;
   delete position_z_offset_property_;
@@ -165,6 +205,8 @@ void AttentionAura3DDisplay::analyzeSectors(const perception_msgs::msg::ObjectLi
     sector.has_objects = false;
   }
 
+  const int selected_class = class_filter_property_ ? class_filter_property_->getOptionInt() : -1;
+
   if (msg->objects.empty()) {
     // If no objects, set all sectors to low visibility
     for (auto& sector : sectors_) {
@@ -178,6 +220,13 @@ void AttentionAura3DDisplay::analyzeSectors(const perception_msgs::msg::ObjectLi
   std::vector<float> sector_attention(NUM_SECTORS, 0.0f);
 
   for (const auto& object : msg->objects) {
+    if (selected_class >= 0) {
+      auto classification = perception_msgs::object_access::getClassWithHighestProbability(object);
+      if (static_cast<int>(classification.type) != selected_class) {
+        continue;
+      }
+    }
+
     // Calculate angle from ego to object
     float dx = static_cast<float>(perception_msgs::object_access::getX(object));
     float dy = static_cast<float>(perception_msgs::object_access::getY(object));
@@ -256,14 +305,15 @@ void AttentionAura3DDisplay::createAuraElements()
     // Create material for this sector with vertex colors enabled
     std::string material_name = "AttentionAura3DMaterial_" + std::to_string(material_counter_++) + "_" + std::to_string(i);
     Ogre::MaterialPtr material = Ogre::MaterialManager::getSingleton().create(material_name, Ogre::ResourceGroupManager::DEFAULT_RESOURCE_GROUP_NAME);
-    
+
     Ogre::Pass* pass = material->getTechnique(0)->getPass(0);
     pass->setSceneBlending(Ogre::SBT_TRANSPARENT_ALPHA);
     pass->setDepthWriteEnabled(false);
     pass->setDepthCheckEnabled(true);
+    pass->setDepthBias(1.0f, 0.0f); // push aura slightly down so closer geometry renders in front
     pass->setLightingEnabled(false);
     pass->setCullingMode(Ogre::CULL_NONE);
-    
+
     // Enable vertex colors - this is crucial!
     pass->setVertexColourTracking(Ogre::TVC_DIFFUSE);
     
@@ -276,6 +326,7 @@ void AttentionAura3DDisplay::createAuraElements()
     node->attachObject(manual_object);
   }
 
+  updateRenderSettings();
   updateAura();
 }
 
@@ -490,6 +541,7 @@ void AttentionAura3DDisplay::updateAuraProperties()
   if (has_last_pose_) {
     applySceneNodeTransform(last_position_, last_orientation_);
   }
+  updateRenderSettings();
   updateAura();
 }
 
@@ -508,6 +560,18 @@ void AttentionAura3DDisplay::applySceneNodeTransform(const Ogre::Vector3& positi
 
   scene_node_->setPosition(position + world_offset);
   scene_node_->setOrientation(orientation);
+}
+
+void AttentionAura3DDisplay::updateRenderSettings()
+{
+  uint8_t queue = draw_in_background_property_ && draw_in_background_property_->getBool() ?
+    Ogre::RENDER_QUEUE_BACKGROUND : Ogre::RENDER_QUEUE_MAIN;
+
+  for (auto* manual_object : sector_objects_) {
+    if (manual_object) {
+      manual_object->setRenderQueueGroup(queue);
+    }
+  }
 }
 
 } // namespace displays

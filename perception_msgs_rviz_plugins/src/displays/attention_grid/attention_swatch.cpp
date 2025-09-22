@@ -80,12 +80,10 @@ AttentionSwatch::AttentionSwatch(
   setupMaterial();
   setupSceneNodeWithManualObject();
 
-  scene_node_->setPosition(x * resolution, y * resolution, 0);
+  scene_node_->setPosition(x * resolution, y * resolution, 0.01f);
   scene_node_->setScale(width * resolution, height * resolution, 1.0);
 
-  if (draw_under) {
-    manual_object_->setRenderQueueGroup(Ogre::RENDER_QUEUE_4);
-  }
+  setDrawOrder(draw_under);
 
   // Don't show grid until the plugin is actually enabled
   manual_object_->setVisible(false);
@@ -168,6 +166,19 @@ void AttentionSwatch::setDepthWriteEnabled(bool depth_write_enabled)
   }
 }
 
+void AttentionSwatch::setDrawOrder(bool draw_under)
+{
+  if (manual_object_) {
+    manual_object_->setRenderQueueGroup(draw_under ? Ogre::RENDER_QUEUE_4 : Ogre::RENDER_QUEUE_MAIN);
+  }
+
+  if (material_) {
+    // Positive bias pushes the swatch slightly away from the camera so foreground geometry remains visible
+    const float bias = draw_under ? 1.0f : -1.0f;
+    material_->setDepthBias(bias, 0.0f);
+  }
+}
+
 Ogre::Pass * AttentionSwatch::getTechniquePass()
 {
   if (material_) {
@@ -203,7 +214,7 @@ void AttentionSwatch::setupMaterial()
 
   material_->setReceiveShadows(false);
   material_->getTechnique(0)->setLightingEnabled(false);
-  material_->setDepthBias(-16.0f, 0.0f);
+  material_->setDepthBias(0.0f, 0.0f);
   material_->setCullingMode(Ogre::CULL_NONE);
   material_->setDepthWriteEnabled(false);
 }
