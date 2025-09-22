@@ -49,6 +49,7 @@ class ColourValue;
 class Quaternion;
 class SceneManager;
 class SceneNode;
+class ManualObject;
 }  // namespace Ogre
 
 namespace perception_msgs {
@@ -224,6 +225,15 @@ class ObjectState {
    */
   void setVisualizeMesh(const bool& val);
 
+  // Hoverboard visualization
+  void setVisualizeHoverboard(const bool& val);
+  void setHoverboardThickness(const float& val);
+  void setHoverboardCornerRadius(const float& val);
+  void setHoverboardGlow(const bool& val);
+  void setHoverboardGlowParams(const float& height, const float& intensity);
+  void setHoverboardCapStyle(int style);
+  void setHoverboardCornerSegments(int segs);
+
   /**
    * @brief Set the Bounding Box Dimensions explicitly (e.g. for EgoData where dimensions are not part of the EGO-State-Model)
    *
@@ -387,6 +397,8 @@ class ObjectState {
   std::shared_ptr<rviz_rendering::Shape> bbox_;
   std::shared_ptr<rviz_rendering::Shape> bbox_cone_;
   std::shared_ptr<rviz_rendering::Shape> bbox_mesh_;
+  Ogre::ManualObject* hoverboard_mo_ = nullptr;
+  Ogre::ManualObject* hoverboard_glow_mo_ = nullptr;
   std::shared_ptr<rviz_rendering::Arrow> vel_arrow_;
   std::shared_ptr<rviz_rendering::Arrow> acc_arrow_;
   std::shared_ptr<rviz_rendering::MovableText> text_;
@@ -411,6 +423,7 @@ class ObjectState {
   bool indicate_direction_ = true;
   bool visualize_bounding_box_ = true;
   bool visualize_mesh_ = false;
+  bool visualize_hoverboard_ = false;
   bool visualize_velocity_ = true;
   float velocity_scale_ = 1.0;
   bool velocity_height_ = false;
@@ -436,6 +449,17 @@ class ObjectState {
   float char_height_prediction_probs_ = 4.0;
   std::string text_probabilities_;
   std::string material;
+
+  // Hoverboard params
+  float hoverboard_thickness_ = 0.12f;
+  float hoverboard_corner_radius_ = 0.35f;
+  bool hoverboard_glow_ = true;
+  float hoverboard_glow_height_ = 0.7f;
+  float hoverboard_glow_intensity_ = 0.6f;
+  int hoverboard_cap_style_ = 2; // 0=square,1=bevel,2=round
+  int hoverboard_corner_segments_ = 12;
+  std::string hoverboard_material_name_ = "ObjectHoverboard/Tile";
+  std::string hoverboard_glow_material_name_ = "ObjectHoverboard/Glow";
 
   const double kFixedMeshHeightCar = 1.5;
   const double kFixedMeshHeightTruck = 4.0;

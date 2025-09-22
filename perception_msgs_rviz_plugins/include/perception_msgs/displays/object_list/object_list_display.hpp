@@ -41,6 +41,9 @@ namespace rviz_common {
 namespace properties {
 class ColorProperty;
 class FloatProperty;
+class BoolProperty;
+class EnumProperty;
+class IntProperty;
 }  // namespace properties
 }  // namespace rviz_common
 
@@ -78,7 +81,16 @@ protected:
   // Object Appearance Properties
   rviz_common::properties::Property *appearance_properties_;
   rviz_common::properties::BoolProperty *viz_bounding_box_, *viz_direction_ind_, *viz_mesh_;
-  // Color by Classification
+  // Hoverboard appearance
+  rviz_common::properties::BoolProperty *viz_hoverboard_;
+  rviz_common::properties::FloatProperty *hoverboard_thickness_;
+  rviz_common::properties::FloatProperty *hoverboard_corner_radius_;
+  rviz_common::properties::EnumProperty *hoverboard_cap_style_;
+  rviz_common::properties::IntProperty *hoverboard_corner_segments_;
+  rviz_common::properties::BoolProperty *hoverboard_glow_;
+  rviz_common::properties::FloatProperty *hoverboard_glow_height_;
+  rviz_common::properties::FloatProperty *hoverboard_glow_intensity_;
+  // Color by Classification (applies to multiple modes)
   rviz_common::properties::BoolProperty *color_property_group_;
   rviz_common::properties::ColorProperty *color_property_pedestrian_;
   rviz_common::properties::ColorProperty *color_property_bicycle_;
