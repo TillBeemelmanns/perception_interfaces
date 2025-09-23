@@ -25,7 +25,6 @@ SOFTWARE.
 #pragma once
 
 #include <mutex>
-#include <cstddef>
 
 #include "perception_msgs/msg/object_list.hpp"
 
@@ -111,7 +110,6 @@ private:
   QColor mid_color_;
   QColor low_color_;
   QString title_text_;
-  std::size_t last_object_count_;
 
   double smoothed_certainty_;
   bool have_certainty_;

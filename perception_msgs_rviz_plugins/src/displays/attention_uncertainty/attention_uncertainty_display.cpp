@@ -70,7 +70,7 @@ AttentionUncertaintyDisplay::AttentionUncertaintyDisplay()
   blink_frequency_(2.0f), smoothing_alpha_(0.6f),
   high_color_(0, 220, 120), mid_color_(255, 200, 40),
   low_color_(255, 70, 70), title_text_(QStringLiteral("Perception Certainty")),
-  smoothed_certainty_(0.0), have_certainty_(false), last_object_count_(0),
+  smoothed_certainty_(0.0), have_certainty_(false),
   update_required_(false), blink_state_(false), blink_timer_(0.0),
   overlay_(nullptr), panel_(nullptr)
 {
@@ -210,7 +210,6 @@ void AttentionUncertaintyDisplay::processMessage(perception_msgs::msg::ObjectLis
     return;
   }
 
-  last_object_count_ = msg->objects.size();
   const double certainty = std::clamp(computeCertainty(*msg), 0.0, 1.0);
 
   std::lock_guard<std::mutex> lock(hud_mutex_);
@@ -516,25 +515,6 @@ void AttentionUncertaintyDisplay::updateHUD()
 
   painter.drawText(QRectF(0, bar_y + bar_height + 8, hud_width_, 32),
                    Qt::AlignHCenter | Qt::AlignVCenter, percentage_text);
-
-  if (last_object_count_ > 0) {
-    QFont count_font = painter.font();
-    count_font.setPointSize(12);
-    count_font.setBold(false);
-    painter.setFont(count_font);
-    painter.setPen(QColor(200, 220, 255, 180));
-
-    QString count_text = QStringLiteral("%1 objs")
-      .arg(static_cast<unsigned long long>(last_object_count_));
-
-    const int count_x = bar_x + bar_width + 12;
-    const int count_y = bar_y + (bar_height / 2);
-    painter.drawText(QRectF(count_x, count_y - 12, hud_width_ - count_x - margin, 24),
-                     Qt::AlignLeft | Qt::AlignVCenter, count_text);
-
-    painter.setFont(value_font);
-    painter.setPen(value_color);
-  }
 
   painter.end();
   pixel_buffer->unlock();
