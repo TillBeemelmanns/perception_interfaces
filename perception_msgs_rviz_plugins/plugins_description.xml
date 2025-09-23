@@ -99,4 +99,15 @@
     <message_type>perception_msgs/msg/ObjectList</message_type>
   </class>
 
+  <class
+    name="AttentionUncertainty"
+    type="perception_msgs::displays::AttentionUncertaintyDisplay"
+    base_class_type="rviz_common::Display"
+  >
+    <description>
+      Overlay HUD showing smoothed mean classification certainty as a color coded bar with configurable thresholds.
+    </description>
+    <message_type>perception_msgs/msg/ObjectList</message_type>
+  </class>
+
 </library>

@@ -49,6 +49,7 @@ if(${ROS_VERSION} EQUAL 2)
     include/perception_msgs/displays/attention_hud/attention_hud_display.hpp
     include/perception_msgs/displays/attention_aura3d/attention_aura3d_display.hpp
     include/perception_msgs/displays/attention_cloud/attention_cloud_display.hpp
+    include/perception_msgs/displays/attention_uncertainty/attention_uncertainty_display.hpp
   )
 
   foreach(header "${display_headers_to_moc}")
@@ -66,6 +67,7 @@ if(${ROS_VERSION} EQUAL 2)
     src/displays/attention_hud/attention_hud_display.cpp
     src/displays/attention_aura3d/attention_aura3d_display.cpp
     src/displays/attention_cloud/attention_cloud_display.cpp
+    src/displays/attention_uncertainty/attention_uncertainty_display.cpp
   )
 
   add_library(${PROJECT_NAME} SHARED
