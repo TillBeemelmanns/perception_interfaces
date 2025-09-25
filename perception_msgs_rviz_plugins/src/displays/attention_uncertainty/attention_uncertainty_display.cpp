@@ -184,7 +184,11 @@ void AttentionUncertaintyDisplay::onInitialize()
 
   rviz_rendering::RenderSystem::get()->prepareOverlays(context_->getSceneManager());
   createHUDOverlay();
-  update_required_ = true;
+  {
+    std::lock_guard<std::mutex> lock(hud_mutex_);
+    updateHUD();
+    update_required_ = false;
+  }
 }
 
 void AttentionUncertaintyDisplay::onEnable()
