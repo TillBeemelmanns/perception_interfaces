@@ -62,10 +62,14 @@ TrafficLightDisplay::TrafficLightDisplay() {
 }
 
 TrafficLightDisplay::~TrafficLightDisplay() {
-  if (initialized()) viz_object_states_.clear();
-  delete enable_type_property_;
-  delete enable_timeout_property_;
-  delete timeout_property_;
+  if (timeout_timer_) {
+    timeout_timer_->cancel();
+  }
+  timeout_timer_.reset();
+
+  if (initialized()) {
+    viz_object_states_.clear();
+  }
 }
 
 void TrafficLightDisplay::onInitialize() {

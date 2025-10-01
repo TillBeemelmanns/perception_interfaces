@@ -152,40 +152,14 @@ EgoDataDisplay::EgoDataDisplay() {
 }
 
 EgoDataDisplay::~EgoDataDisplay() {
-  if (initialized()) scene_manager_->destroyManualObject(manual_object_);
-  delete color_property_;
-  delete alpha_property_;
-  delete viz_z_dim_;
-  delete viz_bounding_box_;
-  delete viz_direction_ind_;
-  delete viz_text_;
-  delete viz_velocity_;
-  delete viz_acceleration_;
-  delete velocity_scale_;
-  delete velocity_height_;
-  delete use_velocity_color_;
-  delete velocity_color_property_;
-  delete acceleration_scale_;
-  delete use_acceleration_color_;
-  delete acceleration_color_property_;
-  delete char_height_;
-  delete print_vel_;
-  delete enable_timeout_property_;
-  delete timeout_property_;
-  delete viz_trajectory_;
-  delete trajectory_alpha_property_;
-  delete drop_down_;
-  delete color_options_;
-  delete parameter_options_;
-  delete color_property_base_;
-  delete color_negative_dynamics_;
-  delete color_positive_dynamics_;
-  delete v_max_property_;
-  delete a_max_property_;
-  delete trajectory_end_cap_;
-  delete trajectory_fade_out_;
-  delete trajectory_fade_length_;
-  delete trajectory_round_segments_;
+  if (timeout_timer_) {
+    timeout_timer_->cancel();
+  }
+  timeout_timer_.reset();
+
+  if (initialized()) {
+    scene_manager_->destroyManualObject(manual_object_);
+  }
 }
 
 void EgoDataDisplay::onInitialize() {

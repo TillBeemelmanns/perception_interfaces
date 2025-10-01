@@ -196,50 +196,14 @@ ObjectListDisplay::ObjectListDisplay()
 
 ObjectListDisplay::~ObjectListDisplay()
 {
-  if (initialized() ) viz_object_states_.clear();
-  delete appearance_properties_;
-  delete color_property_;
-  delete alpha_property_;
-  delete color_property_group_;
-  delete viz_bounding_box_;
-  delete viz_direction_ind_;
-  delete viz_text_;
-  delete viz_velocity_;
-  delete viz_acceleration_;
-  delete velocity_scale_;
-  delete use_velocity_color_;
-  delete velocity_color_property_;
-  delete acceleration_scale_;
-  delete use_acceleration_color_;
-  delete acceleration_color_property_;
-  delete char_height_;
-  delete use_text_color_class_;
-  delete print_id_;
-  delete print_exist_prob_;
-  delete print_class_;
-  delete print_vel_;
-  delete color_property_pedestrian_;
-  delete color_property_bicycle_;
-  delete color_property_motorbike_;
-  delete color_property_car_;
-  delete color_property_truck_;
-  delete color_property_van_;
-  delete color_property_bus_;
-  delete color_property_animal_;
-  delete color_property_road_obstacle_;
-  delete color_property_train_;
-  delete color_property_trailer_;
-  delete color_property_unknown_;
-  delete enable_timeout_property_;
-  delete timeout_property_;
-  delete viz_hoverboard_;
-  delete hoverboard_thickness_;
-  delete hoverboard_corner_radius_;
-  delete hoverboard_cap_style_;
-  delete hoverboard_corner_segments_;
-  delete hoverboard_glow_;
-  delete hoverboard_glow_height_;
-  delete hoverboard_glow_intensity_;
+  if (timeout_timer_) {
+    timeout_timer_->cancel();
+  }
+  timeout_timer_.reset();
+
+  if (initialized()) {
+    viz_object_states_.clear();
+  }
 }
 
 void ObjectListDisplay::onInitialize()
