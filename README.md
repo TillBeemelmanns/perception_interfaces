@@ -1,6 +1,11 @@
 # Perception Interfaces
 
-This repository provides a set of ROS packages (ROS *and* ROS 2) with common messages and tools relating to the perception task in automated driving and C-ITS. The perception task here refers to both environment perception and self perception.
+<p align="left">
+  <img src="./assets/teaser.png" alt="Teaser" align="right" height="200" />
+  This repository provides a set of ROS packages (ROS <em>and</em> ROS 2) with common messages and tools relating to the perception task in automated driving and C-ITS. The perception task here refers to both environment perception and self perception.
+</p>
+
+<br clear="right" />
 
 > [!IMPORTANT]  
 > This repository is open-sourced and maintained by the [**Institute for Automotive Engineering (ika) at RWTH Aachen University**](https://www.ika.rwth-aachen.de/).  
