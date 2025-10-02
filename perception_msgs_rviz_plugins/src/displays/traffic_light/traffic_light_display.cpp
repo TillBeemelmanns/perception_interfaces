@@ -137,13 +137,13 @@ void TrafficLightDisplay::processMessage(perception_msgs::msg::ObjectList::Const
 
   if (msg->objects.size()) {
     for (int i = 0; i < int(msg->objects.size()); i++) {
-      // Render Object State
+      // render object state
       std::unique_ptr<perception_msgs::rendering::TrafficLight> state_ptr =
           std::make_unique<perception_msgs::rendering::TrafficLight>(scene_manager_, scene_node_);
 
       state_ptr->setVisualizeType(enable_type_property_->getBool());
 
-      // Render
+      // render
       state_ptr->setObjectState(msg->objects[i].state);
       viz_object_states_.push_back(std::move(state_ptr));
     }
