@@ -41,6 +41,9 @@ namespace rviz_common {
 namespace properties {
 class ColorProperty;
 class FloatProperty;
+class BoolProperty;
+class EnumProperty;
+class IntProperty;
 }  // namespace properties
 }  // namespace rviz_common
 
@@ -70,15 +73,24 @@ public:
 protected:
   void processMessage(perception_msgs::msg::ObjectList::ConstSharedPtr msg) override;
 
-  // Properties
-  // General
+  // properties
+  // general
   rviz_common::properties::ColorProperty *color_property_;
   rviz_common::properties::FloatProperty *alpha_property_;
 
-  // Object Appearance Properties
+  // object appearance properties
   rviz_common::properties::Property *appearance_properties_;
   rviz_common::properties::BoolProperty *viz_bounding_box_, *viz_direction_ind_, *viz_mesh_;
-  // Color by Classification
+  // hoverboard appearance
+  rviz_common::properties::BoolProperty *viz_hoverboard_;
+  rviz_common::properties::FloatProperty *hoverboard_thickness_;
+  rviz_common::properties::FloatProperty *hoverboard_corner_radius_;
+  rviz_common::properties::EnumProperty *hoverboard_cap_style_;
+  rviz_common::properties::IntProperty *hoverboard_corner_segments_;
+  rviz_common::properties::BoolProperty *hoverboard_glow_;
+  rviz_common::properties::FloatProperty *hoverboard_glow_height_;
+  rviz_common::properties::FloatProperty *hoverboard_glow_intensity_;
+  // color by classification (applies to multiple modes)
   rviz_common::properties::BoolProperty *color_property_group_;
   rviz_common::properties::ColorProperty *color_property_pedestrian_;
   rviz_common::properties::ColorProperty *color_property_bicycle_;
@@ -93,19 +105,19 @@ protected:
   rviz_common::properties::ColorProperty *color_property_trailer_;
   rviz_common::properties::ColorProperty *color_property_unknown_;
 
-  // Velocity Properties
+  // velocity properties
   rviz_common::properties::BoolProperty *viz_velocity_;
   rviz_common::properties::FloatProperty *velocity_scale_;
   rviz_common::properties::BoolProperty *use_velocity_color_;
   rviz_common::properties::ColorProperty *velocity_color_property_;
 
-  // Acceleration Properties
+  // acceleration properties
   rviz_common::properties::BoolProperty *viz_acceleration_;
   rviz_common::properties::FloatProperty *acceleration_scale_;
   rviz_common::properties::BoolProperty *use_acceleration_color_;
   rviz_common::properties::ColorProperty *acceleration_color_property_;
 
-  // Text Properties
+  // text properties
   rviz_common::properties::BoolProperty *viz_text_;
   rviz_common::properties::FloatProperty *char_height_;
   rviz_common::properties::BoolProperty *use_text_color_class_;
@@ -114,7 +126,7 @@ protected:
   rviz_common::properties::BoolProperty *print_class_;
   rviz_common::properties::BoolProperty *print_vel_;
 
-  // Prediction Properties
+  // prediction properties
   rviz_common::properties::BoolProperty *viz_predictions_;
   rviz_common::properties::BoolProperty *viz_prediction_points_;
   rviz_common::properties::ColorProperty *color_property_prediction_line_;
