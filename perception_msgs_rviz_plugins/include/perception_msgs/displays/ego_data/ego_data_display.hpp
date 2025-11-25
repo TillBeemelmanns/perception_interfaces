@@ -80,24 +80,24 @@ class EgoDataDisplay : public rviz_common::MessageFilterDisplay<perception_msgs:
   Ogre::ManualObject *manual_object_;
   std::string trajectory_material_name_ = "EgoTrajectory/ThickLine";
 
-  // Properties
-  // General
+  // properties
+  // general
   rviz_common::properties::ColorProperty *color_property_;
   rviz_common::properties::FloatProperty *alpha_property_;
   rviz_common::properties::BoolProperty *viz_z_dim_, *viz_bounding_box_, *viz_direction_ind_, *viz_text_,
       *viz_velocity_, *viz_acceleration_;
 
-  // Velocity Properties
+  // velocity properties
   rviz_common::properties::FloatProperty *velocity_scale_;
   rviz_common::properties::BoolProperty *use_velocity_color_, *velocity_height_;
   rviz_common::properties::ColorProperty *velocity_color_property_;
 
-  // Acceleration Properties
+  // acceleration properties
   rviz_common::properties::FloatProperty *acceleration_scale_;
   rviz_common::properties::BoolProperty *use_acceleration_color_;
   rviz_common::properties::ColorProperty *acceleration_color_property_;
 
-  // Text Properties
+  // text properties
   rviz_common::properties::FloatProperty *char_height_;
   rviz_common::properties::BoolProperty *print_vel_;
 
@@ -105,13 +105,13 @@ class EgoDataDisplay : public rviz_common::MessageFilterDisplay<perception_msgs:
   rviz_common::properties::BoolProperty* enable_timeout_property_;
   rviz_common::properties::FloatProperty* timeout_property_;
 
-  // Trajectory Properties
+  // trajectory properties
   rviz_common::properties::Property *color_options_, *parameter_options_;
   rviz_common::properties::BoolProperty *viz_trajectory_;
   rviz_common::properties::ColorProperty *color_property_base_, *color_negative_dynamics_, *color_positive_dynamics_;
   rviz_common::properties::FloatProperty *trajectory_alpha_property_, *v_max_property_, *a_max_property_;
   rviz_common::properties::EnumProperty *drop_down_;
-  // Trajectory ending customization
+  // trajectory ending customization
   rviz_common::properties::EnumProperty *trajectory_end_cap_;
   rviz_common::properties::BoolProperty *trajectory_fade_out_;
   rviz_common::properties::FloatProperty *trajectory_fade_length_;

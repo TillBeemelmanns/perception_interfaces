@@ -62,10 +62,14 @@ TrafficLightDisplay::TrafficLightDisplay() {
 }
 
 TrafficLightDisplay::~TrafficLightDisplay() {
-  if (initialized()) viz_object_states_.clear();
-  delete enable_type_property_;
-  delete enable_timeout_property_;
-  delete timeout_property_;
+  if (timeout_timer_) {
+    timeout_timer_->cancel();
+  }
+  timeout_timer_.reset();
+
+  if (initialized()) {
+    viz_object_states_.clear();
+  }
 }
 
 void TrafficLightDisplay::onInitialize() {
@@ -133,13 +137,13 @@ void TrafficLightDisplay::processMessage(perception_msgs::msg::ObjectList::Const
 
   if (msg->objects.size()) {
     for (int i = 0; i < int(msg->objects.size()); i++) {
-      // Render Object State
+      // render object state
       std::unique_ptr<perception_msgs::rendering::TrafficLight> state_ptr =
           std::make_unique<perception_msgs::rendering::TrafficLight>(scene_manager_, scene_node_);
 
       state_ptr->setVisualizeType(enable_type_property_->getBool());
 
-      // Render
+      // render
       state_ptr->setObjectState(msg->objects[i].state);
       viz_object_states_.push_back(std::move(state_ptr));
     }
