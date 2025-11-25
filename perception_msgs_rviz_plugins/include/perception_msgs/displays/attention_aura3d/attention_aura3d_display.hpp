@@ -35,6 +35,11 @@ struct DirectionSector3D {
   float target_opacity;    // Target opacity for smooth transitions
   float current_opacity;   // Current opacity for smooth animations
   bool has_objects;        // Whether this direction has any objects
+  float min_distance;      // Closest object distance (meters)
+  float weighted_distance; // Threat-weighted closest distance
+  float threat_level;      // 0.0 (safe) .. 1.0 (critical)
+  bool is_dangerous;       // Flag when sector is in dangerous range
+  bool should_blink;       // Whether the sector should trigger blinking
 };
 
 class AttentionAura3DDisplay : public rviz_common::MessageFilterDisplay<perception_msgs::msg::ObjectList>
@@ -75,6 +80,7 @@ private:
   rviz_common::properties::FloatProperty* position_x_offset_property_;
   rviz_common::properties::FloatProperty* position_y_offset_property_;
   rviz_common::properties::FloatProperty* position_z_offset_property_;
+  rviz_common::properties::FloatProperty* blink_distance_property_;
   
   // 3D Objects
   std::vector<Ogre::SceneNode*> sector_nodes_;
@@ -89,6 +95,9 @@ private:
   // Animation
   void updateAnimations();
   static int material_counter_;
+  std::chrono::steady_clock::time_point last_animation_time_ {};
+  bool animation_time_initialized_ {false};
+  float blink_time_accumulator_ {0.0f};
 
   // Transform helpers
   void applySceneNodeTransform(const Ogre::Vector3& position, const Ogre::Quaternion& orientation);

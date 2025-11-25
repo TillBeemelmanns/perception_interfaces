@@ -86,6 +86,36 @@ ObjectListDisplay::ObjectListDisplay()
     "Height of the glow plume.", hoverboard_glow_);
   hoverboard_glow_intensity_ = new rviz_common::properties::FloatProperty("HB Glow Intensity [0..1]", 0.6,
     "Intensity multiplier for glow color.", hoverboard_glow_);
+
+  // Uncertainty visualization properties
+  viz_xy_uncertainty_ = new rviz_common::properties::BoolProperty("XY Uncertainty Ellipse", false,
+    "Visualize XY position uncertainty as an ellipse.", appearance_properties_);
+  xy_uncertainty_color_ = new rviz_common::properties::ColorProperty("Color", QColor(0, 255, 255),
+    "Color for XY uncertainty ellipse.", viz_xy_uncertainty_);
+  xy_uncertainty_alpha_ = new rviz_common::properties::FloatProperty("Alpha", 1.0,
+    "Transparency of XY uncertainty ellipse (0=transparent, 1=opaque).", viz_xy_uncertainty_);
+  xy_uncertainty_alpha_->setMin(0.0);
+  xy_uncertainty_alpha_->setMax(1.0);
+  xy_uncertainty_scale_ = new rviz_common::properties::FloatProperty("Scale", 16.0,
+    "Scale factor for uncertainty (1.0 = 1 std dev, 2.0 = 2 std devs).", viz_xy_uncertainty_);
+  xy_uncertainty_scale_->setMin(0.1);
+  xy_uncertainty_segments_ = new rviz_common::properties::IntProperty("Segments", 16,
+    "Number of segments for ellipse smoothness.", viz_xy_uncertainty_);
+  xy_uncertainty_segments_->setMin(8);
+  xy_uncertainty_segments_->setMax(128);
+
+  viz_yaw_uncertainty_ = new rviz_common::properties::BoolProperty("Yaw Uncertainty Cone", false,
+    "Visualize yaw angle uncertainty as a cone/wedge.", appearance_properties_);
+  yaw_uncertainty_color_ = new rviz_common::properties::ColorProperty("Color", QColor(255, 128, 0),
+    "Color for yaw uncertainty cone.", viz_yaw_uncertainty_);
+  yaw_uncertainty_alpha_ = new rviz_common::properties::FloatProperty("Alpha", 1.0,
+    "Transparency of yaw uncertainty cone (0=transparent, 1=opaque).", viz_yaw_uncertainty_);
+  yaw_uncertainty_alpha_->setMin(0.0);
+  yaw_uncertainty_alpha_->setMax(1.0);
+  yaw_uncertainty_cone_length_ = new rviz_common::properties::FloatProperty("Cone Length [m]", 3.0,
+    "Length of the yaw uncertainty cone in meters.", viz_yaw_uncertainty_);
+  yaw_uncertainty_cone_length_->setMin(0.1);
+
   viz_direction_ind_ = new rviz_common::properties::BoolProperty("Orientation Indication", false,
     "Visualize a cone indicating the direction of an object.", viz_bounding_box_);
   // Classification Color Properties
@@ -240,6 +270,15 @@ ObjectListDisplay::~ObjectListDisplay()
   delete hoverboard_glow_;
   delete hoverboard_glow_height_;
   delete hoverboard_glow_intensity_;
+  delete viz_xy_uncertainty_;
+  delete xy_uncertainty_color_;
+  delete xy_uncertainty_alpha_;
+  delete xy_uncertainty_scale_;
+  delete xy_uncertainty_segments_;
+  delete viz_yaw_uncertainty_;
+  delete yaw_uncertainty_color_;
+  delete yaw_uncertainty_alpha_;
+  delete yaw_uncertainty_cone_length_;
 }
 
 void ObjectListDisplay::onInitialize()
@@ -445,6 +484,20 @@ void ObjectListDisplay::processMessage(perception_msgs::msg::ObjectList::ConstSh
       state_ptr->setHoverboardCornerSegments(hoverboard_corner_segments_->getInt());
       state_ptr->setHoverboardGlow(hoverboard_glow_->getBool());
       state_ptr->setHoverboardGlowParams(hoverboard_glow_height_->getFloat(), hoverboard_glow_intensity_->getFloat());
+      // Uncertainty visualization settings
+      state_ptr->setVisualizeXYUncertainty(viz_xy_uncertainty_->getBool());
+      if(viz_xy_uncertainty_->getBool()) {
+        state_ptr->setXYUncertaintyColor(rviz_common::properties::qtToOgre(xy_uncertainty_color_->getColor()));
+        state_ptr->setXYUncertaintyAlpha(xy_uncertainty_alpha_->getFloat());
+        state_ptr->setXYUncertaintyScale(xy_uncertainty_scale_->getFloat());
+        state_ptr->setXYUncertaintySegments(xy_uncertainty_segments_->getInt());
+      }
+      state_ptr->setVisualizeYawUncertainty(viz_yaw_uncertainty_->getBool());
+      if(viz_yaw_uncertainty_->getBool()) {
+        state_ptr->setYawUncertaintyColor(rviz_common::properties::qtToOgre(yaw_uncertainty_color_->getColor()));
+        state_ptr->setYawUncertaintyAlpha(yaw_uncertainty_alpha_->getFloat());
+        state_ptr->setYawUncertaintyConeLength(yaw_uncertainty_cone_length_->getFloat());
+      }
       state_ptr->setVisualizeVelocity(visualize_velocity);
       if(visualize_velocity)
       {

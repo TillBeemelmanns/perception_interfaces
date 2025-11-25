@@ -3,6 +3,8 @@
 #include <cmath>
 #include <algorithm>
 #include <sstream>
+#include <limits>
+#include <chrono>
 
 #include <OgreSceneManager.h>
 #include <OgreMaterialManager.h>
@@ -49,6 +51,52 @@ constexpr ClassOption kClassOptions[] = {
   {"Bike Union", perception_msgs::msg::ObjectClassification::BIKE_UNION},
   {"Unknown", perception_msgs::msg::ObjectClassification::UNKNOWN}
 };
+
+constexpr float kMinColorDistanceMeters = 6.0f;
+constexpr float kMaxColorDistanceMeters = 40.0f;
+constexpr float kBaseCautionDistanceMeters = 15.0f;
+constexpr float kBaseDangerDistanceMeters = 7.5f;
+constexpr float kBaseBlinkDistanceMeters = 4.0f;
+constexpr float kBlinkFrequencyHz = 2.5f;
+
+float classificationRiskMultiplier(int class_type)
+{
+  using perception_msgs::msg::ObjectClassification;
+  switch (class_type) {
+    case ObjectClassification::PEDESTRIAN:
+      return 0.5f;
+    case ObjectClassification::BICYCLE:
+    case ObjectClassification::BIKE_UNION:
+      return 0.65f;
+    case ObjectClassification::MOTORBIKE:
+      return 0.75f;
+    case ObjectClassification::CAR:
+    case ObjectClassification::CAR_UNION:
+      return 1.0f;
+    case ObjectClassification::VAN:
+      return 1.05f;
+    case ObjectClassification::BUS:
+    case ObjectClassification::TRUCK:
+    case ObjectClassification::TRUCK_UNION:
+    case ObjectClassification::TRAILER:
+      return 1.15f;
+    case ObjectClassification::TRAIN:
+      return 1.2f;
+    default:
+      return 1.0f;
+  }
+}
+
+QColor lerpColor(const QColor& from, const QColor& to, float t)
+{
+  t = std::clamp(t, 0.0f, 1.0f);
+  QColor result;
+  result.setRedF(from.redF() + (to.redF() - from.redF()) * t);
+  result.setGreenF(from.greenF() + (to.greenF() - from.greenF()) * t);
+  result.setBlueF(from.blueF() + (to.blueF() - from.blueF()) * t);
+  result.setAlphaF(from.alphaF() + (to.alphaF() - from.alphaF()) * t);
+  return result;
+}
 }  // namespace
 
 int AttentionAura3DDisplay::material_counter_ = 0;
@@ -130,6 +178,13 @@ AttentionAura3DDisplay::AttentionAura3DDisplay()
   position_z_offset_property_->setMin(-5.0f);
   position_z_offset_property_->setMax(5.0f);
 
+  blink_distance_property_ = new rviz_common::properties::FloatProperty(
+    "Blink Threshold", kBaseBlinkDistanceMeters,
+    "Blinking activates when the threat-weighted object distance drops below this value (meters)",
+    this, SLOT(updateAuraProperties()));
+  blink_distance_property_->setMin(0.5f);
+  blink_distance_property_->setMax(100.0f);
+
   // Initialize sectors with base visibility for debugging
   for (auto& sector : sectors_) {
     sector.attention_level = 0.0f;
@@ -137,6 +192,11 @@ AttentionAura3DDisplay::AttentionAura3DDisplay()
     sector.target_opacity = 0.2f; // Start dim - will brighten with objects
     sector.current_opacity = 0.2f;
     sector.has_objects = false;
+    sector.min_distance = std::numeric_limits<float>::infinity();
+    sector.weighted_distance = std::numeric_limits<float>::infinity();
+    sector.threat_level = 0.0f;
+    sector.is_dangerous = false;
+    sector.should_blink = false;
   }
 }
 
@@ -155,6 +215,7 @@ AttentionAura3DDisplay::~AttentionAura3DDisplay()
   delete position_x_offset_property_;
   delete position_y_offset_property_;
   delete position_z_offset_property_;
+  delete blink_distance_property_;
 }
 
 void AttentionAura3DDisplay::onInitialize()
@@ -169,6 +230,8 @@ void AttentionAura3DDisplay::reset()
   destroyAuraElements();
   createAuraElements();
   has_last_pose_ = false;
+  animation_time_initialized_ = false;
+  blink_time_accumulator_ = 0.0f;
 }
 
 void AttentionAura3DDisplay::processMessage(const perception_msgs::msg::ObjectList::ConstSharedPtr msg)
@@ -203,9 +266,27 @@ void AttentionAura3DDisplay::analyzeSectors(const perception_msgs::msg::ObjectLi
     sector.attention_level = 0.0f;
     sector.object_count = 0;
     sector.has_objects = false;
+    sector.min_distance = std::numeric_limits<float>::infinity();
+    sector.weighted_distance = std::numeric_limits<float>::infinity();
+    sector.threat_level = 0.0f;
+    sector.is_dangerous = false;
+    sector.should_blink = false;
   }
 
   const int selected_class = class_filter_property_ ? class_filter_property_->getOptionInt() : -1;
+
+  const float x_offset = position_x_offset_property_ ? position_x_offset_property_->getFloat() : 0.0f;
+  const float y_offset = position_y_offset_property_ ? position_y_offset_property_->getFloat() : 0.0f;
+  const float z_offset = position_z_offset_property_ ? position_z_offset_property_->getFloat() : 0.0f;
+
+  const float radius = radius_property_ ? radius_property_->getValue().toFloat() : 10.0f;
+  const float thickness = thickness_property_ ? thickness_property_->getValue().toFloat() : 10.0f;
+  const float outer_radius = std::max(radius + 0.5f * thickness, 1.0f);
+  const float color_range = std::clamp(std::max(outer_radius, kBaseCautionDistanceMeters), kMinColorDistanceMeters, kMaxColorDistanceMeters);
+  const float base_danger_distance = std::min(kBaseDangerDistanceMeters, color_range * 0.7f);
+  float blink_threshold = blink_distance_property_ ? blink_distance_property_->getFloat() : kBaseBlinkDistanceMeters;
+  float blink_distance = std::clamp(blink_threshold, 0.1f, color_range);
+  const float danger_distance = std::max(base_danger_distance, blink_distance);
 
   if (msg->objects.empty()) {
     // If no objects, set all sectors to low visibility
@@ -220,39 +301,55 @@ void AttentionAura3DDisplay::analyzeSectors(const perception_msgs::msg::ObjectLi
   std::vector<float> sector_attention(NUM_SECTORS, 0.0f);
 
   for (const auto& object : msg->objects) {
-    if (selected_class >= 0) {
-      auto classification = perception_msgs::object_access::getClassWithHighestProbability(object);
-      if (static_cast<int>(classification.type) != selected_class) {
-        continue;
-      }
+    auto classification = perception_msgs::object_access::getClassWithHighestProbability(object);
+    if (selected_class >= 0 && static_cast<int>(classification.type) != selected_class) {
+      continue;
     }
 
     // Calculate angle from ego to object
-    float dx = static_cast<float>(perception_msgs::object_access::getX(object));
-    float dy = static_cast<float>(perception_msgs::object_access::getY(object));
+    float dx = static_cast<float>(perception_msgs::object_access::getX(object)) - x_offset;
+    float dy = static_cast<float>(perception_msgs::object_access::getY(object)) - y_offset;
+    float dz = static_cast<float>(perception_msgs::object_access::getZ(object)) - z_offset;
     float angle = std::atan2(dy, dx);
-    
+
     int sector_idx = getSectorIndex(angle);
-    
+
     // Calculate attention based on distance (closer objects get more attention)
-    float distance = std::sqrt(dx * dx + dy * dy);
+    float distance = std::sqrt(dx * dx + dy * dy + dz * dz);
+    float risk_multiplier = classificationRiskMultiplier(static_cast<int>(classification.type));
+    float weighted_distance = distance * risk_multiplier;
+
     float attention_weight = 1.0f / (1.0f + distance * 0.1f); // Inverse distance weighting
-    
+
     sector_attention[sector_idx] += attention_weight;
     sectors_[sector_idx].object_count++;
     sectors_[sector_idx].has_objects = true;
-    
+    sectors_[sector_idx].min_distance = std::min(sectors_[sector_idx].min_distance, distance);
+    sectors_[sector_idx].weighted_distance = std::min(sectors_[sector_idx].weighted_distance, weighted_distance);
+
     total_attention += attention_weight;
+
+    float normalized_threat = 1.0f - std::clamp(weighted_distance / color_range, 0.0f, 1.0f);
+    normalized_threat = std::pow(normalized_threat, 0.75f);
+    sectors_[sector_idx].threat_level = std::max(sectors_[sector_idx].threat_level, normalized_threat);
+    if (weighted_distance <= danger_distance) {
+      sectors_[sector_idx].is_dangerous = true;
+    }
+    if (weighted_distance <= blink_distance) {
+      sectors_[sector_idx].should_blink = true;
+    }
   }
 
   // Normalize attention levels and set dynamic target opacities
   if (total_attention > 0.0f) {
     for (int i = 0; i < NUM_SECTORS; ++i) {
       sectors_[i].attention_level = sector_attention[i] / total_attention;
-      
+
       if (sectors_[i].has_objects) {
-        // Sectors with objects: bright and attention-based (0.8 to 1.0)
-        sectors_[i].target_opacity = std::max(0.8f, std::min(1.0f, sectors_[i].attention_level * 3.0f));
+        // Sectors with objects: brighten based on attention and threat (0.8 to 1.0+)
+        float base_opacity = std::max(0.8f, std::min(1.0f, sectors_[i].attention_level * 3.0f));
+        float threat_boost = 0.2f * sectors_[i].threat_level;
+        sectors_[i].target_opacity = std::clamp(base_opacity + threat_boost, 0.0f, 1.0f);
       } else {
         // Sectors without objects: dim baseline
         sectors_[i].target_opacity = 0.2f;
@@ -393,24 +490,63 @@ void AttentionAura3DDisplay::createTrapezoidalElement(int sector_index, float /*
   std::string material_name = sector_materials_[sector_index]->getName();
   
   // Calculate color based on current sector state
-  QColor base_color = color_property_->getColor();
+  QColor safe_color = color_property_->getColor();
   float base_alpha = alpha_property_->getValue().toFloat();
-  
-  // Get current opacity from sector state (this is the key!)
-  float current_opacity = (sector_index < static_cast<int>(sectors_.size())) ? 
-    sectors_[sector_index].current_opacity : 0.3f;
-  
-  // Use the sector's dynamic opacity directly (no minimum override!)
-  // This allows sectors to be dim (0.2) when no objects, bright (0.8-1.0) when objects detected
-  
-  // Apply small boost for visibility but preserve dynamic range
-  float boosted_opacity = std::min(1.0f, current_opacity * 1.1f);
-  
+
+  const DirectionSector3D* sector_state = (sector_index < static_cast<int>(sectors_.size())) ?
+    &sectors_[sector_index] : nullptr;
+
+  float threat_level = 0.0f;
+  bool should_blink = false;
+  bool is_dangerous = false;
+  if (sector_state) {
+    threat_level = std::clamp(sector_state->threat_level, 0.0f, 1.0f);
+    should_blink = sector_state->should_blink;
+    is_dangerous = sector_state->is_dangerous;
+  }
+
+  QColor caution_color(255, 180, 0); // bright amber
+  QColor danger_color(255, 0, 0);
+  QColor gradient_color = safe_color;
+
+  if (threat_level > 0.0f) {
+    if (threat_level < 0.6f) {
+      gradient_color = lerpColor(safe_color, caution_color, threat_level / 0.6f);
+    } else {
+      gradient_color = lerpColor(caution_color, danger_color, (threat_level - 0.6f) / 0.4f);
+    }
+  }
+
+  if (is_dangerous) {
+    // Shift slightly more towards danger even without blinking
+    gradient_color = lerpColor(gradient_color, danger_color, 0.3f * threat_level);
+  }
+
+  QColor base_gradient_color = gradient_color;
+  bool blink_on = false;
+  if (should_blink) {
+    float blink_phase = std::fmod(blink_time_accumulator_ * kBlinkFrequencyHz, 1.0f);
+    blink_on = blink_phase < 0.5f;
+    if (blink_on) {
+      gradient_color = danger_color;
+    } else {
+      gradient_color = base_gradient_color;
+    }
+  }
+
+  // Get current opacity from sector state
+  float current_opacity = sector_state ? sector_state->current_opacity : 0.3f;
+  float severity_multiplier = 1.0f + 0.4f * threat_level;
+  float boosted_opacity = std::clamp(current_opacity * severity_multiplier, 0.0f, 1.0f);
+  if (blink_on) {
+    boosted_opacity = std::max(boosted_opacity, 0.85f);
+  }
+
   Ogre::ColourValue vertex_color(
-    base_color.redF(),
-    base_color.greenF(),
-    base_color.blueF(),
-    base_alpha * boosted_opacity // Use boosted opacity
+    gradient_color.redF(),
+    gradient_color.greenF(),
+    gradient_color.blueF(),
+    base_alpha * boosted_opacity
   );
   
   // Create flat trapezoidal sector shape (like HUD but on ground)
@@ -464,12 +600,14 @@ void AttentionAura3DDisplay::createTrapezoidalElement(int sector_index, float /*
   manual_object->end();
 
   // Add border rendering
-  QColor border_color = border_color_property_->getColor();
+  QColor border_base = border_color_property_->getColor();
+  QColor border_color = lerpColor(border_base, gradient_color, 0.6f);
+  float border_opacity = base_alpha * std::clamp(boosted_opacity * (0.85f + 0.15f * threat_level), 0.0f, 1.0f);
   Ogre::ColourValue border_vertex_color(
     border_color.redF(),
     border_color.greenF(),
     border_color.blueF(),
-    base_alpha * boosted_opacity // Same opacity as main element
+    border_opacity
   );
 
   // Create border as line strips - slightly elevated to avoid z-fighting
@@ -517,10 +655,24 @@ void AttentionAura3DDisplay::updateAura()
 
 void AttentionAura3DDisplay::updateAnimations()
 {
+  const auto now = std::chrono::steady_clock::now();
+  float dt = 1.0f / 60.0f;
+  if (animation_time_initialized_) {
+    dt = std::chrono::duration_cast<std::chrono::duration<float>>(now - last_animation_time_).count();
+    dt = std::clamp(dt, 1.0f / 240.0f, 0.1f); // Avoid huge or tiny jumps
+  } else {
+    animation_time_initialized_ = true;
+  }
+  last_animation_time_ = now;
+
+  blink_time_accumulator_ += dt;
+  if (blink_time_accumulator_ > 1000.0f) {
+    blink_time_accumulator_ = std::fmod(blink_time_accumulator_, 1000.0f);
+  }
+
   // Fast animation like HUD (2.0f per second)
   const float animation_speed = 5.0f; // Even faster for more responsive feel
-  const float dt = 1.0f / 60.0f; // Assume 60 FPS for consistent animation
-  
+
   for (auto& sector : sectors_) {
     float diff = sector.target_opacity - sector.current_opacity;
     float step = animation_speed * dt;

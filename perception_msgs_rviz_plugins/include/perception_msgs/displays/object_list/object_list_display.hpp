@@ -90,6 +90,18 @@ protected:
   rviz_common::properties::BoolProperty *hoverboard_glow_;
   rviz_common::properties::FloatProperty *hoverboard_glow_height_;
   rviz_common::properties::FloatProperty *hoverboard_glow_intensity_;
+
+  // Uncertainty visualization
+  rviz_common::properties::BoolProperty *viz_xy_uncertainty_;
+  rviz_common::properties::ColorProperty *xy_uncertainty_color_;
+  rviz_common::properties::FloatProperty *xy_uncertainty_alpha_;
+  rviz_common::properties::FloatProperty *xy_uncertainty_scale_;
+  rviz_common::properties::IntProperty *xy_uncertainty_segments_;
+  rviz_common::properties::BoolProperty *viz_yaw_uncertainty_;
+  rviz_common::properties::ColorProperty *yaw_uncertainty_color_;
+  rviz_common::properties::FloatProperty *yaw_uncertainty_alpha_;
+  rviz_common::properties::FloatProperty *yaw_uncertainty_cone_length_;
+
   // Color by Classification (applies to multiple modes)
   rviz_common::properties::BoolProperty *color_property_group_;
   rviz_common::properties::ColorProperty *color_property_pedestrian_;

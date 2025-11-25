@@ -234,6 +234,17 @@ class ObjectState {
   void setHoverboardCapStyle(int style);
   void setHoverboardCornerSegments(int segs);
 
+  // Uncertainty visualization
+  void setVisualizeXYUncertainty(const bool& val);
+  void setXYUncertaintyColor(const Ogre::ColourValue& color);
+  void setXYUncertaintyAlpha(const float& alpha);
+  void setXYUncertaintyScale(const float& scale);
+  void setXYUncertaintySegments(int segs);
+  void setVisualizeYawUncertainty(const bool& val);
+  void setYawUncertaintyColor(const Ogre::ColourValue& color);
+  void setYawUncertaintyAlpha(const float& alpha);
+  void setYawUncertaintyConeLength(const float& length);
+
   /**
    * @brief Set the Bounding Box Dimensions explicitly (e.g. for EgoData where dimensions are not part of the EGO-State-Model)
    *
@@ -390,6 +401,22 @@ class ObjectState {
    */
   void velocityToText(const perception_msgs::msg::ObjectState& state, std::string& text);
 
+  /**
+   * @brief Visualize XY position uncertainty as an ellipse
+   *
+   * @param state
+   * @param color
+   */
+  void visualizeXYUncertaintyEllipse(const perception_msgs::msg::ObjectState& state, const Ogre::ColourValue& color);
+
+  /**
+   * @brief Visualize yaw angle uncertainty as a cone/wedge
+   *
+   * @param state
+   * @param color
+   */
+  void visualizeYawUncertaintyCone(const perception_msgs::msg::ObjectState& state, const Ogre::ColourValue& color);
+
   Ogre::SceneNode* scene_node_;
   Ogre::SceneNode* mesh_node_;
   Ogre::SceneManager* scene_manager_;
@@ -460,6 +487,21 @@ class ObjectState {
   int hoverboard_corner_segments_ = 12;
   std::string hoverboard_material_name_ = "ObjectHoverboard/Tile";
   std::string hoverboard_glow_material_name_ = "ObjectHoverboard/Glow";
+
+  // Uncertainty visualization params
+  bool visualize_xy_uncertainty_ = false;
+  Ogre::ColourValue xy_uncertainty_color_ = Ogre::ColourValue(0.0f, 1.0f, 1.0f, 1.0f);
+  float xy_uncertainty_alpha_ = 1.0f;
+  float xy_uncertainty_scale_ = 16.0f;  // Scale factor for standard deviation to ellipse size
+  int xy_uncertainty_segments_ = 16;
+  bool visualize_yaw_uncertainty_ = false;
+  Ogre::ColourValue yaw_uncertainty_color_ = Ogre::ColourValue(1.0f, 0.5f, 0.0f, 1.0f);
+  float yaw_uncertainty_alpha_ = 1.0f;
+  float yaw_uncertainty_cone_length_ = 3.0f;
+  Ogre::ManualObject* xy_uncertainty_mo_ = nullptr;
+  Ogre::ManualObject* yaw_uncertainty_mo_ = nullptr;
+  std::string xy_uncertainty_material_name_ = "ObjectUncertainty/XYEllipse";
+  std::string yaw_uncertainty_material_name_ = "ObjectUncertainty/YawCone";
 
   const double kFixedMeshHeightCar = 1.5;
   const double kFixedMeshHeightTruck = 4.0;
