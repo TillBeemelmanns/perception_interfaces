@@ -64,13 +64,18 @@ AttentionUncertaintyDisplay::AttentionUncertaintyDisplay()
   smoothing_alpha_property_(nullptr),
   high_color_property_(nullptr), mid_color_property_(nullptr),
   low_color_property_(nullptr), title_text_property_(nullptr),
+  regression_high_color_property_(nullptr), regression_mid_color_property_(nullptr),
+  regression_low_color_property_(nullptr), max_variance_property_(nullptr),
   hud_width_(kDefaultWidth), hud_height_(kDefaultHeight),
   hud_left_(40), hud_top_(40), hud_alpha_(0.9f), bg_alpha_(0.35f),
   high_threshold_(0.75f), low_threshold_(0.45f), blink_threshold_(0.25f),
   blink_frequency_(2.0f), smoothing_alpha_(0.6f),
   high_color_(0, 220, 120), mid_color_(255, 200, 40),
   low_color_(255, 70, 70), title_text_(QStringLiteral("Perception Certainty")),
-  smoothed_certainty_(0.0), have_certainty_(false),
+  regression_high_color_(100, 180, 255), regression_mid_color_(180, 130, 255),
+  regression_low_color_(255, 100, 180), max_variance_(10.0f),
+  smoothed_classification_certainty_(0.0), smoothed_regression_certainty_(0.0),
+  have_classification_certainty_(false), have_regression_certainty_(false),
   update_required_(false), blink_state_(false), blink_timer_(0.0),
   overlay_(nullptr), panel_(nullptr)
 {
@@ -150,6 +155,24 @@ AttentionUncertaintyDisplay::AttentionUncertaintyDisplay()
     "Low Certainty Color", low_color_,
     "Bar color when certainty is below the medium threshold", this, SLOT(updateThresholds()));
 
+  regression_high_color_property_ = new rviz_common::properties::ColorProperty(
+    "Regression High Color", regression_high_color_,
+    "Regression bar color when certainty is above the high threshold", this, SLOT(updateThresholds()));
+
+  regression_mid_color_property_ = new rviz_common::properties::ColorProperty(
+    "Regression Mid Color", regression_mid_color_,
+    "Regression bar color when certainty is between medium and high thresholds", this, SLOT(updateThresholds()));
+
+  regression_low_color_property_ = new rviz_common::properties::ColorProperty(
+    "Regression Low Color", regression_low_color_,
+    "Regression bar color when certainty is below the medium threshold", this, SLOT(updateThresholds()));
+
+  max_variance_property_ = new rviz_common::properties::FloatProperty(
+    "Max Variance", max_variance_,
+    "Maximum expected variance for normalization (higher variance = lower certainty)", this, SLOT(updateThresholds()));
+  max_variance_property_->setMin(0.1f);
+  max_variance_property_->setMax(100.0f);
+
   title_text_property_ = new rviz_common::properties::StringProperty(
     "Title", title_text_,
     "Text displayed above the certainty bar (leave empty to hide)", this, SLOT(updateTitle()));
@@ -175,6 +198,10 @@ AttentionUncertaintyDisplay::~AttentionUncertaintyDisplay()
   delete high_color_property_;
   delete mid_color_property_;
   delete low_color_property_;
+  delete regression_high_color_property_;
+  delete regression_mid_color_property_;
+  delete regression_low_color_property_;
+  delete max_variance_property_;
   delete title_text_property_;
 }
 
@@ -214,21 +241,34 @@ void AttentionUncertaintyDisplay::processMessage(perception_msgs::msg::ObjectLis
     return;
   }
 
-  const double certainty = std::clamp(computeCertainty(*msg), 0.0, 1.0);
+  const double classification_certainty = std::clamp(computeClassificationCertainty(*msg), 0.0, 1.0);
+  const double regression_certainty = std::clamp(computeRegressionCertainty(*msg), 0.0, 1.0);
 
   std::lock_guard<std::mutex> lock(hud_mutex_);
 
-  if (!have_certainty_) {
-    smoothed_certainty_ = certainty;
-    have_certainty_ = true;
+  // Smooth classification certainty
+  if (!have_classification_certainty_) {
+    smoothed_classification_certainty_ = classification_certainty;
+    have_classification_certainty_ = true;
   } else {
     const double clamped_factor = std::clamp(static_cast<double>(smoothing_alpha_), 0.0, 0.95);
     const double new_weight = 1.0 - clamped_factor;
-    smoothed_certainty_ = clamped_factor * smoothed_certainty_ + new_weight * certainty;
+    smoothed_classification_certainty_ = clamped_factor * smoothed_classification_certainty_ + new_weight * classification_certainty;
+  }
+
+  // Smooth regression certainty
+  if (!have_regression_certainty_) {
+    smoothed_regression_certainty_ = regression_certainty;
+    have_regression_certainty_ = true;
+  } else {
+    const double clamped_factor = std::clamp(static_cast<double>(smoothing_alpha_), 0.0, 0.95);
+    const double new_weight = 1.0 - clamped_factor;
+    smoothed_regression_certainty_ = clamped_factor * smoothed_regression_certainty_ + new_weight * regression_certainty;
   }
 
   std::ostringstream oss;
-  oss << "Smoothed certainty: " << std::fixed << std::setprecision(2) << smoothed_certainty_;
+  oss << "Classification: " << std::fixed << std::setprecision(2) << smoothed_classification_certainty_
+      << " | Regression: " << std::fixed << std::setprecision(2) << smoothed_regression_certainty_;
   setStatus(rviz_common::properties::StatusProperty::Ok, "Certainty", oss.str().c_str());
 
   update_required_ = true;
@@ -243,7 +283,7 @@ void AttentionUncertaintyDisplay::update(float wall_dt, float /*ros_dt*/)
   {
     std::lock_guard<std::mutex> lock(hud_mutex_);
 
-    const bool critical = have_certainty_ && (smoothed_certainty_ <= static_cast<double>(blink_threshold_));
+    const bool critical = have_classification_certainty_ && (smoothed_classification_certainty_ <= static_cast<double>(blink_threshold_));
 
     if (critical && blink_frequency_ > kClampEpsilon) {
       blink_timer_ += wall_dt;
@@ -268,7 +308,7 @@ void AttentionUncertaintyDisplay::update(float wall_dt, float /*ros_dt*/)
   }
 }
 
-double AttentionUncertaintyDisplay::computeCertainty(const perception_msgs::msg::ObjectList& objects) const
+double AttentionUncertaintyDisplay::computeClassificationCertainty(const perception_msgs::msg::ObjectList& objects) const
 {
   if (objects.objects.empty()) {
     return 0.0;
@@ -296,6 +336,58 @@ double AttentionUncertaintyDisplay::computeCertainty(const perception_msgs::msg:
 
     sum += std::clamp(max_probability, 0.0, 1.0);
     ++count;
+  }
+
+  if (count == 0) {
+    return 0.0;
+  }
+
+  return sum / static_cast<double>(count);
+}
+
+double AttentionUncertaintyDisplay::computeRegressionCertainty(const perception_msgs::msg::ObjectList& objects) const
+{
+  if (objects.objects.empty()) {
+    return 0.0;
+  }
+
+  double sum = 0.0;
+  std::size_t count = 0;
+
+  for (const auto& object : objects.objects) {
+    const auto& cov = object.state.continuous_state_covariance;
+    const int state_size = object.state.continuous_state.size();
+    
+    // Check if covariance data is available
+    if (cov.size() < static_cast<size_t>(state_size * state_size) || state_size < 12) {
+      continue;
+    }
+    
+    // Extract variances for key states: X(0), Y(1), Z(2), YAW(7), WIDTH(9), LENGTH(10), HEIGHT(11)
+    // In ISCACTR model: indices are [0]=X, [1]=Y, [2]=Z, [7]=YAW, [9]=WIDTH, [10]=LENGTH, [11]=HEIGHT
+    const std::array<int, 7> indices = {0, 1, 2, 7, 9, 10, 11};
+    double total_variance = 0.0;
+    int valid_variances = 0;
+    
+    for (int idx : indices) {
+      const double var = cov[idx * state_size + idx];
+      // Skip invalid variances (-1 means not set, also skip NaN/Inf)
+      if (var < 0.0 || !std::isfinite(var)) {
+        continue;
+      }
+      total_variance += var;
+      ++valid_variances;
+    }
+    
+    if (valid_variances > 0) {
+      // Average variance per state
+      const double avg_variance = total_variance / static_cast<double>(valid_variances);
+      // Convert variance to certainty: high variance = low certainty
+      // Use exponential decay: certainty = exp(-variance / max_variance)
+      const double certainty = std::exp(-avg_variance / static_cast<double>(max_variance_));
+      sum += std::clamp(certainty, 0.0, 1.0);
+      ++count;
+    }
   }
 
   if (count == 0) {
@@ -383,6 +475,10 @@ void AttentionUncertaintyDisplay::updateHUD()
   high_color_ = high_color_property_->getColor();
   mid_color_ = mid_color_property_->getColor();
   low_color_ = low_color_property_->getColor();
+  regression_high_color_ = regression_high_color_property_->getColor();
+  regression_mid_color_ = regression_mid_color_property_->getColor();
+  regression_low_color_ = regression_low_color_property_->getColor();
+  max_variance_ = std::max(max_variance_property_->getFloat(), 0.1f);
 
   panel_->setPosition(static_cast<Ogre::Real>(hud_left_), static_cast<Ogre::Real>(hud_top_));
   panel_->setDimensions(static_cast<Ogre::Real>(hud_width_), static_cast<Ogre::Real>(hud_height_));
@@ -458,67 +554,127 @@ void AttentionUncertaintyDisplay::updateHUD()
     painter.setFont(base_font);
   }
 
-  // Bar geometry
-  const int bar_width = std::max(36, hud_width_ / 6);
-  const int bar_bottom_margin = 48;
+  // Bar geometry for dual bars
+  const int bar_spacing = 16;  // Space between bars
+  const int bar_width = std::max(28, (hud_width_ - 2 * margin - bar_spacing * 3) / 3);
+  const int bar_bottom_margin = 72;  // More space for labels
   const int bar_height = std::max(60, hud_height_ - bar_top - margin - bar_bottom_margin);
-  const int bar_x = hud_width_ / 2 - bar_width / 2;
+  
+  // Calculate positions for two centered bars
+  const int total_width = 2 * bar_width + bar_spacing;
+  const int start_x = (hud_width_ - total_width) / 2;
+  const int class_bar_x = start_x;
+  const int regr_bar_x = start_x + bar_width + bar_spacing;
   const int bar_y = bar_top + 6;
 
-  const QRect bar_outline(bar_x, bar_y, bar_width, bar_height);
-  QColor bar_outline_color = frame_color;
-  bar_outline_color.setAlpha(static_cast<int>(hud_alpha_ * 200));
-  painter.setPen(QPen(bar_outline_color, 2));
-  painter.setBrush(QColor(255, 255, 255, 25));
-  painter.drawRoundedRect(bar_outline, 8, 8);
+  // Helper lambda to draw a bar with outline and fill
+  auto drawBar = [&](int bar_x, double certainty, bool have_data, 
+                     const QColor& high_col, const QColor& mid_col, const QColor& low_col,
+                     bool is_classification) {
+    // Bar outline
+    const QRect bar_outline(bar_x, bar_y, bar_width, bar_height);
+    QColor bar_outline_color = frame_color;
+    bar_outline_color.setAlpha(static_cast<int>(hud_alpha_ * 200));
+    painter.setPen(QPen(bar_outline_color, 2));
+    painter.setBrush(QColor(255, 255, 255, 25));
+    painter.drawRoundedRect(bar_outline, 8, 8);
 
-  const double certainty = have_certainty_ ? std::clamp(smoothed_certainty_, 0.0, 1.0) : 0.0;
-  const int filled_height = static_cast<int>(certainty * static_cast<double>(bar_height));
-  const int fill_top = bar_y + bar_height - filled_height;
-  const QRect filled_rect(bar_x + 3, fill_top + 3, bar_width - 6, filled_height - 6);
+    const double cert = have_data ? std::clamp(certainty, 0.0, 1.0) : 0.0;
+    const int filled_height = static_cast<int>(cert * static_cast<double>(bar_height));
+    const int fill_top = bar_y + bar_height - filled_height;
+    const QRect filled_rect(bar_x + 3, fill_top + 3, bar_width - 6, filled_height - 6);
 
-  if (filled_rect.height() > 0) {
-    const bool blink_on = blink_state_ && certainty <= static_cast<double>(blink_threshold_);
-    QColor bar_color = barColorForCertainty(certainty, blink_on);
-    bar_color.setAlpha(static_cast<int>(hud_alpha_ * 255));
+    if (filled_rect.height() > 0) {
+      const bool blink_on = is_classification && blink_state_ && cert <= static_cast<double>(blink_threshold_);
+      
+      // Determine bar color based on certainty
+      QColor bar_color;
+      if (cert >= static_cast<double>(high_threshold_)) {
+        bar_color = high_col;
+      } else if (cert >= static_cast<double>(low_threshold_)) {
+        bar_color = mid_col;
+      } else {
+        bar_color = low_col;
+      }
+      
+      if (blink_on) {
+        bar_color = bar_color.lighter(blink_state_ ? 180 : 60);
+      }
+      bar_color.setAlpha(static_cast<int>(hud_alpha_ * 255));
 
-    QLinearGradient gradient(filled_rect.left(), filled_rect.bottom(), filled_rect.right(), filled_rect.top());
-    gradient.setColorAt(0.0, bar_color.darker(120));
-    gradient.setColorAt(1.0, bar_color.lighter(130));
+      QLinearGradient gradient(filled_rect.left(), filled_rect.bottom(), filled_rect.right(), filled_rect.top());
+      gradient.setColorAt(0.0, bar_color.darker(120));
+      gradient.setColorAt(1.0, bar_color.lighter(130));
 
-    painter.setBrush(gradient);
-    painter.setPen(Qt::NoPen);
-    painter.drawRoundedRect(filled_rect, 6, 6);
-  }
+      painter.setBrush(gradient);
+      painter.setPen(Qt::NoPen);
+      painter.drawRoundedRect(filled_rect, 6, 6);
+    }
 
-  // Threshold ticks
-  painter.setPen(QPen(QColor(255, 255, 255, 120), 1, Qt::DashLine));
-  const auto threshold_to_y = [&](float threshold) {
-    return bar_y + bar_height - static_cast<int>(threshold * bar_height);
+    // Threshold ticks
+    painter.setPen(QPen(QColor(255, 255, 255, 100), 1, Qt::DashLine));
+    const auto threshold_to_y = [&](float threshold) {
+      return bar_y + bar_height - static_cast<int>(threshold * bar_height);
+    };
+
+    const int high_y = threshold_to_y(high_threshold_);
+    painter.drawLine(bar_x + 2, high_y, bar_x + bar_width - 2, high_y);
+
+    const int mid_y = threshold_to_y(low_threshold_);
+    painter.drawLine(bar_x + 2, mid_y, bar_x + bar_width - 2, mid_y);
   };
 
-  const int high_y = threshold_to_y(high_threshold_);
-  painter.drawLine(bar_x, high_y, bar_x + bar_width, high_y);
+  // Draw classification bar (left)
+  drawBar(class_bar_x, smoothed_classification_certainty_, have_classification_certainty_,
+          high_color_, mid_color_, low_color_, true);
 
-  const int mid_y = threshold_to_y(low_threshold_);
-  painter.drawLine(bar_x, mid_y, bar_x + bar_width, mid_y);
+  // Draw regression bar (right)
+  drawBar(regr_bar_x, smoothed_regression_certainty_, have_regression_certainty_,
+          regression_high_color_, regression_mid_color_, regression_low_color_, false);
 
-  // Text readouts
+  // Bar labels
+  QFont label_font = base_font;
+  label_font.setPointSize(9);
+  label_font.setBold(true);
+  painter.setFont(label_font);
+  
+  QColor label_color = frame_color;
+  label_color.setAlpha(200);
+  painter.setPen(label_color);
+
+  // Classification label
+  painter.drawText(QRectF(class_bar_x - 10, bar_y + bar_height + 4, bar_width + 20, 16),
+                   Qt::AlignHCenter | Qt::AlignVCenter, QStringLiteral("CLASS"));
+
+  // Regression label
+  painter.drawText(QRectF(regr_bar_x - 10, bar_y + bar_height + 4, bar_width + 20, 16),
+                   Qt::AlignHCenter | Qt::AlignVCenter, QStringLiteral("REGR"));
+
+  // Percentage values
   QFont value_font = painter.font();
-  value_font.setPointSize(18);
+  value_font.setPointSize(12);
   value_font.setBold(true);
   painter.setFont(value_font);
   QColor value_color = frame_color;
   value_color.setAlpha(255);
   painter.setPen(value_color);
 
-  const double percentage = certainty * 100.0;
-  QString percentage_text = have_certainty_
-    ? QString::number(percentage, 'f', 1) + QLatin1String(" %")
-    : QStringLiteral("-- %");
+  const double class_percentage = smoothed_classification_certainty_ * 100.0;
+  const double regr_percentage = smoothed_regression_certainty_ * 100.0;
 
-  painter.drawText(QRectF(0, bar_y + bar_height + 8, hud_width_, 32),
-                   Qt::AlignHCenter | Qt::AlignVCenter, percentage_text);
+  QString class_text = have_classification_certainty_
+    ? QString::number(class_percentage, 'f', 0) + QLatin1String("%")
+    : QStringLiteral("--%");
+
+  QString regr_text = have_regression_certainty_
+    ? QString::number(regr_percentage, 'f', 0) + QLatin1String("%")
+    : QStringLiteral("--%");
+
+  painter.drawText(QRectF(class_bar_x - 10, bar_y + bar_height + 20, bar_width + 20, 20),
+                   Qt::AlignHCenter | Qt::AlignVCenter, class_text);
+
+  painter.drawText(QRectF(regr_bar_x - 10, bar_y + bar_height + 20, bar_width + 20, 20),
+                   Qt::AlignHCenter | Qt::AlignVCenter, regr_text);
 
   painter.end();
   pixel_buffer->unlock();

@@ -46,7 +46,10 @@ namespace perception_msgs {
 namespace displays {
 
 /**
- * @brief Futuristic overlay showing mean perception certainty as a vertical bar chart.
+ * @brief Futuristic overlay showing mean perception certainty as dual vertical bar charts.
+ * 
+ * Shows both classification certainty (from classification probabilities) and
+ * regression certainty (from state covariances) side by side.
  */
 class AttentionUncertaintyDisplay
   : public rviz_common::MessageFilterDisplay<perception_msgs::msg::ObjectList> {
@@ -76,7 +79,8 @@ private:
   void createHUDOverlay();
   void destroyHUDOverlay();
   void updateHUD();
-  double computeCertainty(const perception_msgs::msg::ObjectList& objects) const;
+  double computeClassificationCertainty(const perception_msgs::msg::ObjectList& objects) const;
+  double computeRegressionCertainty(const perception_msgs::msg::ObjectList& objects) const;
   QColor barColorForCertainty(double certainty, bool blink_on) const;
 
   rviz_common::properties::IntProperty* hud_width_property_;
@@ -94,6 +98,10 @@ private:
   rviz_common::properties::ColorProperty* mid_color_property_;
   rviz_common::properties::ColorProperty* low_color_property_;
   rviz_common::properties::StringProperty* title_text_property_;
+  rviz_common::properties::ColorProperty* regression_high_color_property_;
+  rviz_common::properties::ColorProperty* regression_mid_color_property_;
+  rviz_common::properties::ColorProperty* regression_low_color_property_;
+  rviz_common::properties::FloatProperty* max_variance_property_;
 
   int hud_width_;
   int hud_height_;
@@ -110,9 +118,15 @@ private:
   QColor mid_color_;
   QColor low_color_;
   QString title_text_;
+  QColor regression_high_color_;
+  QColor regression_mid_color_;
+  QColor regression_low_color_;
+  float max_variance_;
 
-  double smoothed_certainty_;
-  bool have_certainty_;
+  double smoothed_classification_certainty_;
+  double smoothed_regression_certainty_;
+  bool have_classification_certainty_;
+  bool have_regression_certainty_;
   bool update_required_;
   bool blink_state_;
   double blink_timer_;
@@ -124,8 +138,8 @@ private:
 
   std::mutex hud_mutex_;
 
-  static constexpr int kDefaultWidth = 180;
-  static constexpr int kDefaultHeight = 220;
+  static constexpr int kDefaultWidth = 280;
+  static constexpr int kDefaultHeight = 240;
 };
 
 }  // namespace displays
