@@ -45,7 +45,6 @@ SOFTWARE.
 
 #include <rviz_common/display_context.hpp>
 #include <rviz_rendering/render_system.hpp>
-#include <rviz_common/logging.hpp>
 
 namespace perception_msgs {
 namespace displays {
@@ -156,16 +155,13 @@ VehicleSensorHudDisplay::~VehicleSensorHudDisplay() {
 }
 
 void VehicleSensorHudDisplay::onInitialize() {
-  RVIZ_COMMON_LOG_INFO("VehicleSensorHudDisplay::onInitialize() called");
   MessageFilterDisplay::onInitialize();
   rviz_rendering::RenderSystem::get()->prepareOverlays(context_->getSceneManager());
   createOverlay();
   createLidarSubscriptions();
-  RVIZ_COMMON_LOG_INFO("VehicleSensorHudDisplay::onInitialize() complete");
 }
 
 void VehicleSensorHudDisplay::onEnable() {
-  RVIZ_COMMON_LOG_INFO("VehicleSensorHudDisplay::onEnable() called");
   MessageFilterDisplay::onEnable();
   if (overlay_) overlay_->show();
   createLidarSubscriptions();
@@ -218,18 +214,16 @@ void VehicleSensorHudDisplay::updateLidarTopics() {
   createLidarSubscriptions();
 }
 
-static int update_debug_counter = 0;
-
 void VehicleSensorHudDisplay::update(float wall_dt, float /*ros_dt*/) {
   // Animation phases
-  flow_phase_ += wall_dt * 1.5;
+  flow_phase_ += wall_dt * 1.5;  // Flow speed for particles
   if (flow_phase_ > 1.0) flow_phase_ -= 1.0;
   
-  pulse_phase_ += wall_dt * 3.0;
+  pulse_phase_ += wall_dt * 1.5;  // Slower pulse (was 4.0)
   if (pulse_phase_ > 2.0 * M_PI) pulse_phase_ -= 2.0 * M_PI;
   
-  // Update timeouts - but clamp wall_dt to reasonable value
-  float clamped_dt = std::min(wall_dt, 0.1f);  // Max 100ms per frame
+  // Update timeouts - clamp wall_dt to prevent huge jumps
+  float clamped_dt = std::min(wall_dt, 0.1f);
   {
     std::lock_guard<std::mutex> lock(data_mutex_);
     for (auto& pair : lidar_status_) {
@@ -241,13 +235,6 @@ void VehicleSensorHudDisplay::update(float wall_dt, float /*ros_dt*/) {
     objectlist_last_update_ += clamped_dt;
     if (objectlist_last_update_ > 2.0) {
       has_objectlist_data_ = false;
-    }
-    
-    // Debug print every ~60 frames
-    if (++update_debug_counter % 60 == 0) {
-      RVIZ_COMMON_LOG_INFO_STREAM("VehicleSensorHudDisplay::update() has_objectlist_data_=" 
-                                   << has_objectlist_data_ 
-                                   << " objectlist_last_update_=" << objectlist_last_update_);
     }
   }
   
@@ -353,8 +340,6 @@ void VehicleSensorHudDisplay::updateAppearance() {
 
 void VehicleSensorHudDisplay::processMessage(
     perception_msgs::msg::ObjectList::ConstSharedPtr msg) {
-  RVIZ_COMMON_LOG_INFO_STREAM("VehicleSensorHudDisplay::processMessage() this=" << this
-                               << " received msg with " << msg->objects.size() << " objects");
   std::lock_guard<std::mutex> lock(data_mutex_);
   
   object_count_ = static_cast<int>(msg->objects.size());
@@ -363,7 +348,7 @@ void VehicleSensorHudDisplay::processMessage(
   int valid_class = 0, valid_regr = 0;
   
   for (const auto& obj : msg->objects) {
-    // Classification
+    // Classification certainty
     double max_prob = 0.0;
     for (const auto& c : obj.state.classifications) {
       if (std::isfinite(c.probability)) {
@@ -375,7 +360,7 @@ void VehicleSensorHudDisplay::processMessage(
       ++valid_class;
     }
     
-    // Regression
+    // Regression certainty from covariance
     const auto& cov = obj.state.continuous_state_covariance;
     const int ss = static_cast<int>(obj.state.continuous_state.size());
     if (cov.size() >= static_cast<size_t>(ss * ss) && ss >= 12) {
@@ -404,28 +389,14 @@ void VehicleSensorHudDisplay::processMessage(
   has_objectlist_data_ = true;
   objectlist_last_update_ = 0.0;
   update_required_ = true;
-  
-  RVIZ_COMMON_LOG_INFO_STREAM("VehicleSensorHudDisplay: has_objectlist_data_=" << has_objectlist_data_ 
-                               << " class=" << smoothed_classification_ 
-                               << " regr=" << smoothed_regression_);
 }
 
 double VehicleSensorHudDisplay::computeOverallCertainty() const {
   return (smoothed_classification_ + smoothed_regression_) / 2.0;
 }
 
-static int updatehud_counter = 0;
-
 void VehicleSensorHudDisplay::updateHud() {
-  if (!texture_) {
-    RVIZ_COMMON_LOG_WARNING("VehicleSensorHudDisplay::updateHud() texture_ is null!");
-    return;
-  }
-  
-  if (++updatehud_counter % 30 == 0) {
-    RVIZ_COMMON_LOG_INFO_STREAM("VehicleSensorHudDisplay::updateHud() this=" << this 
-                                 << " has_objectlist_data_=" << has_objectlist_data_);
-  }
+  if (!texture_) return;
   
   Ogre::HardwarePixelBufferSharedPtr buffer = texture_->getBuffer();
   buffer->lock(Ogre::HardwareBuffer::HBL_DISCARD);
@@ -445,7 +416,7 @@ void VehicleSensorHudDisplay::updateHud() {
 void VehicleSensorHudDisplay::drawHud(QPainter& painter) {
   const int margin = 8;
   
-  // Read data under lock first
+  // Read data under lock
   bool has_data;
   double cls_val, reg_val;
   int obj_count;
@@ -455,18 +426,9 @@ void VehicleSensorHudDisplay::drawHud(QPainter& painter) {
     cls_val = smoothed_classification_;
     reg_val = smoothed_regression_;
     obj_count = object_count_;
-    
-    // Debug - log inside lock
-    static int draw_counter = 0;
-    if (++draw_counter % 30 == 0) {
-      RVIZ_COMMON_LOG_INFO_STREAM("VehicleSensorHudDisplay::drawHud() this=" << this 
-                                   << " has_data=" << has_data 
-                                   << " objectlist_last_update_=" << objectlist_last_update_
-                                   << " cls=" << cls_val);
-    }
   }
   
-  // Background
+  // Background gradient
   QLinearGradient bg(0, 0, 0, height_);
   bg.setColorAt(0.0, QColor(15, 25, 40, static_cast<int>(bg_alpha_ * 255 * 0.95)));
   bg.setColorAt(0.5, QColor(20, 35, 55, static_cast<int>(bg_alpha_ * 255)));
@@ -476,11 +438,11 @@ void VehicleSensorHudDisplay::drawHud(QPainter& painter) {
   bg_path.addRoundedRect(QRectF(0, 0, width_, height_), 8, 8);
   painter.fillPath(bg_path, bg);
   
-  // Borders
+  // Border
   painter.setPen(QPen(QColor(60, 140, 200, static_cast<int>(alpha_ * 80)), 1));
   painter.drawPath(bg_path);
   
-  // Title - show live data status
+  // Title with live status
   QFont title_font("Segoe UI", 9, QFont::Bold);
   title_font.setLetterSpacing(QFont::PercentageSpacing, 105);
   painter.setFont(title_font);
@@ -515,114 +477,109 @@ void VehicleSensorHudDisplay::drawWireframeVan(QPainter& painter, const QRectF& 
   const double cx = bounds.center().x();
   const double cy = bounds.center().y();
   
-  // Isometric projection factors
-  const double iso_x = 0.866;  // cos(30°)
-  const double iso_y = 0.5;    // sin(30°)
+  // Isometric projection
+  const double iso_x = 0.866;
+  const double iso_y = 0.5;
   
-  // Van dimensions in isometric space
+  // Van dimensions
   const double length = bounds.width() * 0.6;
-  const double width = bounds.width() * 0.35;
-  const double height = bounds.height() * 0.25;
+  const double van_width = bounds.width() * 0.35;
+  const double van_height = bounds.height() * 0.25;
   
-  // Helper to convert 3D to 2D isometric
   auto to2D = [&](double x, double y, double z) -> QPointF {
     double px = cx + (x - y) * iso_x;
     double py = cy + (x + y) * iso_y - z;
     return QPointF(px, py);
   };
   
-  // Van vertices (centered at origin, front facing left-down)
   const double l2 = length / 2;
-  const double w2 = width / 2;
-  const double h = height;
+  const double w2 = van_width / 2;
+  const double h = van_height;
   const double roof_h = h * 0.7;
   
-  // Bottom corners (z=0)
-  QPointF b_fl = to2D(-l2, -w2, 0);  // front-left
-  QPointF b_fr = to2D(-l2, w2, 0);   // front-right
-  QPointF b_rl = to2D(l2, -w2, 0);   // rear-left
-  QPointF b_rr = to2D(l2, w2, 0);    // rear-right
+  // Van vertices
+  QPointF b_fl = to2D(-l2, -w2, 0);
+  QPointF b_fr = to2D(-l2, w2, 0);
+  QPointF b_rl = to2D(l2, -w2, 0);
+  QPointF b_rr = to2D(l2, w2, 0);
   
-  // Top corners (z=height)
   QPointF t_fl = to2D(-l2, -w2, h);
   QPointF t_fr = to2D(-l2, w2, h);
   QPointF t_rl = to2D(l2, -w2, h);
   QPointF t_rr = to2D(l2, w2, h);
   
-  // Roof corners (lower than top, for van shape)
   QPointF r_fl = to2D(-l2 * 0.6, -w2, h + roof_h);
   QPointF r_fr = to2D(-l2 * 0.6, w2, h + roof_h);
   QPointF r_rl = to2D(l2, -w2, h + roof_h);
   QPointF r_rr = to2D(l2, w2, h + roof_h);
   
-  // Wireframe style
+  // Wireframe
   QColor wire_color = vehicle_color_;
   wire_color.setAlpha(static_cast<int>(alpha_ * 200));
   QPen wire_pen(wire_color, 1.5);
   painter.setPen(wire_pen);
   painter.setBrush(Qt::NoBrush);
   
-  // Draw bottom rectangle
+  // Bottom
   painter.drawLine(b_fl, b_fr);
   painter.drawLine(b_fr, b_rr);
   painter.drawLine(b_rr, b_rl);
   painter.drawLine(b_rl, b_fl);
   
-  // Draw vertical edges
+  // Verticals
   painter.drawLine(b_fl, t_fl);
   painter.drawLine(b_fr, t_fr);
   painter.drawLine(b_rl, t_rl);
   painter.drawLine(b_rr, t_rr);
   
-  // Draw middle rectangle (body top)
+  // Middle
   painter.drawLine(t_fl, t_fr);
   painter.drawLine(t_fr, t_rr);
   painter.drawLine(t_rr, t_rl);
   painter.drawLine(t_rl, t_fl);
   
-  // Draw roof edges
+  // Roof edges
   painter.drawLine(t_fl, r_fl);
   painter.drawLine(t_fr, r_fr);
   painter.drawLine(t_rl, r_rl);
   painter.drawLine(t_rr, r_rr);
   
-  // Draw roof rectangle
+  // Roof
   painter.drawLine(r_fl, r_fr);
   painter.drawLine(r_fr, r_rr);
   painter.drawLine(r_rr, r_rl);
   painter.drawLine(r_rl, r_fl);
   
-  // Windshield line
+  // Windshield accent
   QColor accent(100, 180, 255, static_cast<int>(alpha_ * 150));
   painter.setPen(QPen(accent, 1));
   painter.drawLine(r_fl, r_fr);
   
-  // Center point for data flow
+  // Center point
   QPointF center = to2D(0, 0, h * 0.5);
   
-  // LiDAR positions (at corners)
+  // LiDAR positions
   QPointF lidar_fl = to2D(-l2 * 0.9, -w2 * 0.9, h * 0.3);
   QPointF lidar_fr = to2D(-l2 * 0.9, w2 * 0.9, h * 0.3);
   QPointF lidar_rl = to2D(l2 * 0.9, -w2 * 0.9, h * 0.3);
   QPointF lidar_rr = to2D(l2 * 0.9, w2 * 0.9, h * 0.3);
   
-  // Get LiDAR status and objectlist data under lock
-  bool fl_active, fr_active, rl_active, rr_active;
-  bool has_data;
+  // Get status under lock
+  bool fl_active, fr_active, rl_active, rr_active, has_data;
   {
     std::lock_guard<std::mutex> lock(data_mutex_);
-    fl_active = lidar_status_["FL"].active;
-    fr_active = lidar_status_["FR"].active;
-    rl_active = lidar_status_["RL"].active;
-    rr_active = lidar_status_["RR"].active;
+    fl_active = lidar_status_.at("FL").active;
+    fr_active = lidar_status_.at("FR").active;
+    rl_active = lidar_status_.at("RL").active;
+    rr_active = lidar_status_.at("RR").active;
     has_data = has_objectlist_data_;
   }
   
-  // Draw data flow lines (animated)
-  drawDataFlowLine(painter, lidar_fl, center, fl_active, flow_phase_);
-  drawDataFlowLine(painter, lidar_fr, center, fr_active, flow_phase_ + 0.25);
-  drawDataFlowLine(painter, lidar_rl, center, rl_active, flow_phase_ + 0.5);
-  drawDataFlowLine(painter, lidar_rr, center, rr_active, flow_phase_ + 0.75);
+  // Draw animated data flow lines
+  drawDataFlowLine(painter, lidar_fl, center, fl_active, flow_phase_, pulse_phase_);
+  drawDataFlowLine(painter, lidar_fr, center, fr_active, flow_phase_ + 0.25, pulse_phase_);
+  drawDataFlowLine(painter, lidar_rl, center, rl_active, flow_phase_ + 0.5, pulse_phase_);
+  drawDataFlowLine(painter, lidar_rr, center, rr_active, flow_phase_ + 0.75, pulse_phase_);
   
   // Draw LiDAR indicators
   drawHealthIndicator(painter, lidar_fl, "FL", fl_active);
@@ -644,72 +601,114 @@ void VehicleSensorHudDisplay::drawWireframeVan(QPainter& painter, const QRectF& 
     center_color = unhealthy_color_;
   }
   
-  // Glow
-  QRadialGradient glow(center, 20);
+  // Pulsing glow when healthy
+  double glow_size = (center_color == healthy_color_) ? 20 + 5 * pulse : 20;
+  QRadialGradient glow(center, glow_size);
   QColor glow_col = center_color;
-  glow_col.setAlpha(static_cast<int>(alpha_ * 60 * pulse));
+  glow_col.setAlpha(static_cast<int>(alpha_ * 80 * pulse));
   glow.setColorAt(0.0, glow_col);
   glow.setColorAt(1.0, Qt::transparent);
   painter.setBrush(glow);
   painter.setPen(Qt::NoPen);
-  painter.drawEllipse(center, 20, 20);
+  painter.drawEllipse(center, glow_size, glow_size);
   
-  // Core
-  QRadialGradient core(center, 8);
+  // Core with heartbeat effect
+  double core_size = (center_color == healthy_color_) ? 8 + 2 * pulse : 8;
+  QRadialGradient core(center, core_size);
   core.setColorAt(0.0, center_color.lighter(150));
   core.setColorAt(0.7, center_color);
   core.setColorAt(1.0, center_color.darker(120));
   painter.setBrush(core);
   painter.setPen(QPen(center_color.lighter(130), 1));
-  painter.drawEllipse(center, 8, 8);
+  painter.drawEllipse(center, core_size, core_size);
   
   // Label
   QFont font("Consolas", 6, QFont::Bold);
   painter.setFont(font);
   painter.setPen(QColor(180, 210, 240, static_cast<int>(alpha_ * 200)));
-  painter.drawText(QRectF(center.x() - 15, center.y() + 12, 30, 12), 
+  painter.drawText(QRectF(center.x() - 15, center.y() + 14, 30, 12), 
                    Qt::AlignCenter, "PROC");
 }
 
 void VehicleSensorHudDisplay::drawDataFlowLine(QPainter& painter, 
-    const QPointF& from, const QPointF& to, bool healthy, double phase) {
+    const QPointF& from, const QPointF& to, bool healthy, double phase, double pulse) {
   
   QColor line_color = healthy ? healthy_color_ : unhealthy_color_;
   
   if (healthy) {
-    // Animated flowing line - draw multiple segments
-    const int segments = 8;
-    const double seg_len = 1.0 / segments;
+    // Pulsating glow effect on the path
+    double pulse_intensity = 0.5 + 0.5 * std::sin(pulse);  // 0.0 to 1.0
     
-    for (int i = 0; i < segments; ++i) {
-      double t_start = std::fmod(phase + i * seg_len, 1.0);
-      double t_end = std::fmod(phase + (i + 0.5) * seg_len, 1.0);
-      
-      // Only draw if segment is moving towards center
-      if (t_start < t_end) {
-        QPointF p1(from.x() + (to.x() - from.x()) * t_start,
-                   from.y() + (to.y() - from.y()) * t_start);
-        QPointF p2(from.x() + (to.x() - from.x()) * t_end,
-                   from.y() + (to.y() - from.y()) * t_end);
-        
-        // Fade based on position
-        int alpha_val = static_cast<int>(alpha_ * 180 * (0.3 + 0.7 * t_end));
-        QColor seg_color = line_color;
-        seg_color.setAlpha(alpha_val);
-        
-        painter.setPen(QPen(seg_color, 2, Qt::SolidLine, Qt::RoundCap));
-        painter.drawLine(p1, p2);
-      }
-    }
-    
-    // Subtle base line
-    QColor base_color = line_color;
-    base_color.setAlpha(static_cast<int>(alpha_ * 30));
-    painter.setPen(QPen(base_color, 1));
+    // Outer glow layer - pulsates
+    QColor glow_color = line_color;
+    glow_color.setAlpha(static_cast<int>(alpha_ * 30 * (0.3 + 0.7 * pulse_intensity)));
+    painter.setPen(QPen(glow_color, 5, Qt::SolidLine, Qt::RoundCap));
     painter.drawLine(from, to);
     
+    // Middle glow layer
+    glow_color.setAlpha(static_cast<int>(alpha_ * 50 * (0.4 + 0.6 * pulse_intensity)));
+    painter.setPen(QPen(glow_color, 3, Qt::SolidLine, Qt::RoundCap));
+    painter.drawLine(from, to);
+    
+    // Core line - pulsates in brightness
+    QColor base_color = line_color;
+    base_color.setAlpha(static_cast<int>(alpha_ * (60 + 40 * pulse_intensity)));
+    painter.setPen(QPen(base_color, 1.5, Qt::SolidLine, Qt::RoundCap));
+    painter.drawLine(from, to);
+    
+    // Animated flowing particles with arrows
+    const int num_particles = 3;
+    for (int i = 0; i < num_particles; ++i) {
+      double t = std::fmod(phase + i * (1.0 / num_particles), 1.0);
+      
+      QPointF pos(from.x() + (to.x() - from.x()) * t,
+                  from.y() + (to.y() - from.y()) * t);
+      
+      // Particle size varies - larger near center
+      double size = 2.0 + 2.0 * t;
+      
+      // Brightness increases toward center
+      int alpha_val = static_cast<int>(alpha_ * 255 * (0.3 + 0.7 * t));
+      QColor particle_color = line_color;
+      particle_color.setAlpha(alpha_val);
+      
+      // Glow around particle
+      QRadialGradient particle_glow(pos, size * 2);
+      QColor glow_col = line_color;
+      glow_col.setAlpha(static_cast<int>(alpha_ * 60 * t));
+      particle_glow.setColorAt(0.0, glow_col);
+      particle_glow.setColorAt(1.0, Qt::transparent);
+      painter.setBrush(particle_glow);
+      painter.setPen(Qt::NoPen);
+      painter.drawEllipse(pos, size * 2, size * 2);
+      
+      // Core particle
+      painter.setBrush(particle_color);
+      painter.setPen(Qt::NoPen);
+      painter.drawEllipse(pos, size, size);
+      
+      // Draw chevron/arrow pointing toward center
+      double dx = to.x() - from.x();
+      double dy = to.y() - from.y();
+      double len = std::sqrt(dx*dx + dy*dy);
+      if (len > 0) {
+        dx /= len;
+        dy /= len;
+        
+        double arrow_size = 3.0;
+        QPointF tip = pos;
+        QPointF left(pos.x() - dx * arrow_size - dy * arrow_size * 0.5,
+                     pos.y() - dy * arrow_size + dx * arrow_size * 0.5);
+        QPointF right(pos.x() - dx * arrow_size + dy * arrow_size * 0.5,
+                      pos.y() - dy * arrow_size - dx * arrow_size * 0.5);
+        
+        painter.setPen(QPen(particle_color, 1.5, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+        painter.drawLine(left, tip);
+        painter.drawLine(right, tip);
+      }
+    }
   } else {
-    // Broken/dashed red line
+    // Broken/dashed red line for inactive sensors
     QColor broken_color = line_color;
     broken_color.setAlpha(static_cast<int>(alpha_ * 150));
     
@@ -732,7 +731,20 @@ void VehicleSensorHudDisplay::drawHealthIndicator(QPainter& painter,
   QColor color = active ? healthy_color_ : unhealthy_color_;
   const double size = 5;
   
-  // Small indicator dot
+  // Pulsing glow when active
+  if (active) {
+    double pulse = 0.5 + 0.5 * std::sin(pulse_phase_);
+    QRadialGradient glow(pos, size * 2);
+    QColor glow_col = color;
+    glow_col.setAlpha(static_cast<int>(alpha_ * 40 * pulse));
+    glow.setColorAt(0.0, glow_col);
+    glow.setColorAt(1.0, Qt::transparent);
+    painter.setBrush(glow);
+    painter.setPen(Qt::NoPen);
+    painter.drawEllipse(pos, size * 2, size * 2);
+  }
+  
+  // Indicator dot
   QRadialGradient grad(pos, size);
   grad.setColorAt(0.0, active ? color.lighter(140) : QColor(60, 60, 60));
   grad.setColorAt(0.7, active ? color : QColor(40, 40, 40));
@@ -779,7 +791,7 @@ void VehicleSensorHudDisplay::drawStatusPanel(QPainter& painter, const QRectF& b
                      Qt::AlignRight | Qt::AlignVCenter, val);
   };
   
-  // Read all shared data under lock
+  // Read data under lock
   int active = 0;
   bool has_data = false;
   double cls_val = 0.0;
@@ -794,7 +806,7 @@ void VehicleSensorHudDisplay::drawStatusPanel(QPainter& painter, const QRectF& b
     reg_val = smoothed_regression_;
   }
   
-  // Status
+  // Determine status
   QColor status_col;
   QString status_txt;
   if (!has_data) {

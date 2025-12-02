@@ -89,7 +89,7 @@ private:
   void drawHud(QPainter& painter);
   void drawWireframeVan(QPainter& painter, const QRectF& bounds);
   void drawDataFlowLine(QPainter& painter, const QPointF& from, const QPointF& to,
-                        bool healthy, double phase);
+                        bool healthy, double phase, double pulse);
   void drawHealthIndicator(QPainter& painter, const QPointF& pos, 
                            const QString& label, bool active);
   void drawStatusPanel(QPainter& painter, const QRectF& bounds);
