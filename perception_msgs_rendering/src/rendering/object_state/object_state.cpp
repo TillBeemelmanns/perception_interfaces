@@ -87,6 +87,10 @@ ObjectState::~ObjectState() {
     scene_manager_->destroyManualObject(yaw_uncertainty_mo_);
     yaw_uncertainty_mo_ = nullptr;
   }
+  if (safety_margin_mo_) {
+    scene_manager_->destroyManualObject(safety_margin_mo_);
+    safety_margin_mo_ = nullptr;
+  }
   scene_manager_->destroySceneNode(scene_node_);
 }
 
@@ -217,6 +221,14 @@ void ObjectState::setVisualizeYawUncertainty(const bool& val) { visualize_yaw_un
 void ObjectState::setYawUncertaintyColor(const Ogre::ColourValue& color) { yaw_uncertainty_color_ = color; }
 void ObjectState::setYawUncertaintyAlpha(const float& alpha) { yaw_uncertainty_alpha_ = std::max(0.0f, std::min(1.0f, alpha)); }
 void ObjectState::setYawUncertaintyConeLength(const float& length) { yaw_uncertainty_cone_length_ = std::max(0.1f, length); }
+
+void ObjectState::setVisualizeSafetyMargins(const bool& val) { visualize_safety_margins_ = val; }
+void ObjectState::setSafetyMarginColor(const Ogre::ColourValue& color) { safety_margin_color_ = color; }
+void ObjectState::setSafetyMarginColor2Sigma(const Ogre::ColourValue& color) { safety_margin_color_2sigma_ = color; }
+void ObjectState::setSafetyMarginColor3Sigma(const Ogre::ColourValue& color) { safety_margin_color_3sigma_ = color; }
+void ObjectState::setSafetyMarginAlpha(const float& alpha) { safety_margin_alpha_ = std::max(0.0f, std::min(1.0f, alpha)); }
+void ObjectState::setSafetyMargin2Sigma(const bool& val) { safety_margin_2sigma_ = val; }
+void ObjectState::setSafetyMargin3Sigma(const bool& val) { safety_margin_3sigma_ = val; }
 
 void ObjectState::setVisualizeVelocity(const bool& val) { visualize_velocity_ = val; }
 
@@ -605,6 +617,17 @@ void ObjectState::setObjectStateVizDefault(const perception_msgs::msg::ObjectSta
     visualizeYawUncertaintyCone(state, cone_color);
   } else {
     if (yaw_uncertainty_mo_) { scene_manager_->destroyManualObject(yaw_uncertainty_mo_); yaw_uncertainty_mo_ = nullptr; }
+  }
+
+  // Visualize safety margins as expanded bounding box or circle
+  if (visualize_safety_margins_) {
+    Ogre::ColourValue color_2sigma = safety_margin_color_2sigma_;
+    color_2sigma.a = safety_margin_alpha_;
+    Ogre::ColourValue color_3sigma = safety_margin_color_3sigma_;
+    color_3sigma.a = safety_margin_alpha_;
+    visualizeSafetyMargins(state, color_2sigma, color_3sigma);
+  } else {
+    if (safety_margin_mo_) { scene_manager_->destroyManualObject(safety_margin_mo_); safety_margin_mo_ = nullptr; }
   }
 
   if (visualize_velocity_) {
@@ -1101,6 +1124,249 @@ void ObjectState::visualizeYawUncertaintyCone(const perception_msgs::msg::Object
   yaw_uncertainty_mo_->position(right_x + right_perp_x, right_y + right_perp_y, z_pos + 0.01f); yaw_uncertainty_mo_->colour(edge_color);
   
   yaw_uncertainty_mo_->end();
+}
+
+void ObjectState::visualizeSafetyMargins(const perception_msgs::msg::ObjectState& state, 
+                                          const Ogre::ColourValue& color_2sigma,
+                                          const Ogre::ColourValue& color_3sigma) {
+  // Get covariance values for X and Y positions
+  const int state_size = perception_msgs::object_access::getContinuousStateSize(state);
+  const auto& cov = state.continuous_state_covariance;
+  
+  // Check if covariance data is available and valid
+  if (cov.size() < static_cast<size_t>(state_size * state_size)) {
+    if (safety_margin_mo_) { scene_manager_->destroyManualObject(safety_margin_mo_); safety_margin_mo_ = nullptr; }
+    return;
+  }
+  
+  const double var_x = cov[0 * state_size + 0];  // X variance
+  const double var_y = cov[1 * state_size + 1];  // Y variance
+  
+  // Check for invalid covariance values
+  const double max_valid_variance = 1e6;
+  if (var_x < 0.0 || var_y < 0.0 || 
+      std::isnan(var_x) || std::isnan(var_y) || 
+      std::isinf(var_x) || std::isinf(var_y) ||
+      var_x > max_valid_variance || var_y > max_valid_variance) {
+    if (safety_margin_mo_) { scene_manager_->destroyManualObject(safety_margin_mo_); safety_margin_mo_ = nullptr; }
+    return;
+  }
+  
+  // Standard deviations
+  const float sigma_x = static_cast<float>(std::sqrt(var_x));
+  const float sigma_y = static_cast<float>(std::sqrt(var_y));
+  
+  // Minimum visible threshold
+  const float min_sigma = 0.01f;
+  if (sigma_x < min_sigma && sigma_y < min_sigma) {
+    if (safety_margin_mo_) { scene_manager_->destroyManualObject(safety_margin_mo_); safety_margin_mo_ = nullptr; }
+    return;
+  }
+  
+  // Create material if it doesn't exist
+  if (!Ogre::MaterialManager::getSingleton().resourceExists(safety_margin_material_name_)) {
+    Ogre::MaterialPtr mat = Ogre::MaterialManager::getSingleton().create(
+        safety_margin_material_name_, Ogre::ResourceGroupManager::DEFAULT_RESOURCE_GROUP_NAME);
+    if (!mat.isNull()) {
+      Ogre::Technique* tech = mat->getTechnique(0);
+      if (!tech) tech = mat->createTechnique();
+      Ogre::Pass* pass = tech->getPass(0);
+      if (!pass) pass = tech->createPass();
+      pass->setLightingEnabled(false);
+      pass->setDepthCheckEnabled(true);
+      pass->setDepthWriteEnabled(false);
+      pass->setCullingMode(Ogre::CULL_NONE);
+      pass->setSceneBlending(Ogre::SBT_TRANSPARENT_ALPHA);
+      pass->setVertexColourTracking(Ogre::TVC_DIFFUSE);
+    }
+  }
+  
+  // Create manual object if needed
+  if (!safety_margin_mo_) {
+    safety_margin_mo_ = scene_manager_->createManualObject();
+    safety_margin_mo_->setDynamic(true);
+    scene_node_->attachObject(safety_margin_mo_);
+  }
+  
+  safety_margin_mo_->clear();
+  safety_margin_mo_->begin(safety_margin_material_name_, Ogre::RenderOperation::OT_TRIANGLE_LIST);
+  
+  // Check if this is a pedestrian (use circle) or vehicle (use rectangle)
+  const bool is_pedestrian = (classification_.type == perception_msgs::msg::ObjectClassification::PEDESTRIAN);
+  const bool is_cyclist = (classification_.type == perception_msgs::msg::ObjectClassification::BICYCLE ||
+                           classification_.type == perception_msgs::msg::ObjectClassification::MOTORBIKE);
+  
+  // Z position - place at the bottom of the bounding box, above hoverboard if present
+  const float z_bottom = static_cast<float>(-0.5 * bbox_dims_.z);
+  const float z_pos = z_bottom + (visualize_hoverboard_ ? hoverboard_thickness_ : 0.0f) + 0.03f;
+  
+  // Build sigma levels with their corresponding colors (draw 3σ first, then 2σ on top)
+  std::vector<std::tuple<float, Ogre::ColourValue, bool>> sigma_levels;  // (multiplier, color, is_dotted)
+  sigma_levels.push_back({3.0f, color_3sigma, true});   // 3-sigma with dotted outline
+  sigma_levels.push_back({2.0f, color_2sigma, false});  // 2-sigma with dashed outline
+  
+  const float PI = static_cast<float>(Ogre::Math::PI);
+  
+  // Draw safety margins as expanded shapes
+  for (const auto& level : sigma_levels) {
+    const float sigma_mult = std::get<0>(level);
+    const Ogre::ColourValue& margin_color = std::get<1>(level);
+    const bool is_dotted = std::get<2>(level);
+    
+    // Expansion amount in each direction
+    const float expand_x = sigma_x * sigma_mult;
+    const float expand_y = sigma_y * sigma_mult;
+    
+    if (is_pedestrian || is_cyclist) {
+      // Draw as circle/ellipse for pedestrians and cyclists
+      const float base_radius = static_cast<float>(std::max(bbox_dims_.x, bbox_dims_.y) * 0.5);
+      const float radius_x = base_radius + expand_x;
+      const float radius_y = base_radius + expand_y;
+      
+      const int segments = 32;
+      
+      // Draw filled circle with gradient
+      Ogre::ColourValue center_color = margin_color;
+      center_color.a *= 0.25f;
+      Ogre::ColourValue edge_color = margin_color;
+      edge_color.a *= 0.5f;
+      
+      for (int i = 0; i < segments; ++i) {
+        float angle0 = 2.0f * PI * static_cast<float>(i) / static_cast<float>(segments);
+        float angle1 = 2.0f * PI * static_cast<float>(i + 1) / static_cast<float>(segments);
+        
+        float x0 = radius_x * std::cos(angle0);
+        float y0 = radius_y * std::sin(angle0);
+        float x1 = radius_x * std::cos(angle1);
+        float y1 = radius_y * std::sin(angle1);
+        
+        // Triangle from center to edge
+        safety_margin_mo_->position(0.0f, 0.0f, z_pos); safety_margin_mo_->colour(center_color);
+        safety_margin_mo_->position(x0, y0, z_pos); safety_margin_mo_->colour(edge_color);
+        safety_margin_mo_->position(x1, y1, z_pos); safety_margin_mo_->colour(edge_color);
+      }
+      
+      // Draw dashed/dotted ring outline at the edge
+      const float ring_width = 0.06f;
+      const float inner_ratio = 1.0f - (ring_width / std::min(radius_x, radius_y));
+      Ogre::ColourValue ring_color = margin_color;
+      ring_color.a = std::min(1.0f, margin_color.a * 1.5f);
+      
+      // Dotted pattern uses more skips than dashed
+      const int skip_pattern = is_dotted ? 3 : 2;
+      
+      for (int i = 0; i < segments; ++i) {
+        // Skip segments for dashed/dotted effect
+        if (i % skip_pattern != 1) continue;
+        
+        float angle0 = 2.0f * PI * static_cast<float>(i) / static_cast<float>(segments);
+        float angle1 = 2.0f * PI * static_cast<float>(i + 1) / static_cast<float>(segments);
+        
+        float x0_out = radius_x * std::cos(angle0);
+        float y0_out = radius_y * std::sin(angle0);
+        float x1_out = radius_x * std::cos(angle1);
+        float y1_out = radius_y * std::sin(angle1);
+        float x0_in = radius_x * inner_ratio * std::cos(angle0);
+        float y0_in = radius_y * inner_ratio * std::sin(angle0);
+        float x1_in = radius_x * inner_ratio * std::cos(angle1);
+        float y1_in = radius_y * inner_ratio * std::sin(angle1);
+        
+        const float z_ring = z_pos + (sigma_mult == 3.0f ? 0.003f : 0.006f);
+        
+        safety_margin_mo_->position(x0_in, y0_in, z_ring); safety_margin_mo_->colour(ring_color);
+        safety_margin_mo_->position(x0_out, y0_out, z_ring); safety_margin_mo_->colour(ring_color);
+        safety_margin_mo_->position(x1_out, y1_out, z_ring); safety_margin_mo_->colour(ring_color);
+        
+        safety_margin_mo_->position(x0_in, y0_in, z_ring); safety_margin_mo_->colour(ring_color);
+        safety_margin_mo_->position(x1_out, y1_out, z_ring); safety_margin_mo_->colour(ring_color);
+        safety_margin_mo_->position(x1_in, y1_in, z_ring); safety_margin_mo_->colour(ring_color);
+      }
+    } else {
+      // Draw as expanded rectangle for vehicles
+      const float half_length = static_cast<float>(bbox_dims_.x * 0.5) + expand_x;
+      const float half_width = static_cast<float>(bbox_dims_.y * 0.5) + expand_y;
+      
+      // Corner radius for rounded rectangle
+      const float corner_radius = std::min(0.35f, std::min(half_length, half_width) * 0.25f);
+      const int corner_segments = 8;
+      
+      // Build rounded rectangle boundary
+      std::vector<Ogre::Vector2> boundary;
+      const float HALF_PI = PI * 0.5f;
+      
+      auto addArc = [&](float cx, float cy, float start_angle, float end_angle) {
+        for (int i = 0; i <= corner_segments; ++i) {
+          float t = static_cast<float>(i) / static_cast<float>(corner_segments);
+          float angle = start_angle + t * (end_angle - start_angle);
+          boundary.emplace_back(cx + corner_radius * std::cos(angle), 
+                                cy + corner_radius * std::sin(angle));
+        }
+      };
+      
+      const float hx = half_length - corner_radius;
+      const float hy = half_width - corner_radius;
+      
+      addArc(+hx, +hy, 0.0f, HALF_PI);           // front-right
+      addArc(-hx, +hy, HALF_PI, PI);             // front-left
+      addArc(-hx, -hy, PI, 1.5f * PI);           // rear-left
+      addArc(+hx, -hy, 1.5f * PI, 2.0f * PI);    // rear-right
+      
+      // Draw filled shape with gradient
+      Ogre::ColourValue center_color = margin_color;
+      center_color.a *= 0.2f;
+      Ogre::ColourValue edge_color = margin_color;
+      edge_color.a *= 0.45f;
+      
+      for (size_t i = 0; i < boundary.size(); ++i) {
+        const Ogre::Vector2& p0 = boundary[i];
+        const Ogre::Vector2& p1 = boundary[(i + 1) % boundary.size()];
+        
+        safety_margin_mo_->position(0.0f, 0.0f, z_pos); safety_margin_mo_->colour(center_color);
+        safety_margin_mo_->position(p0.x, p0.y, z_pos); safety_margin_mo_->colour(edge_color);
+        safety_margin_mo_->position(p1.x, p1.y, z_pos); safety_margin_mo_->colour(edge_color);
+      }
+      
+      // Draw dashed/dotted outline
+      const float line_width = 0.05f;
+      Ogre::ColourValue line_color = margin_color;
+      line_color.a = std::min(1.0f, margin_color.a * 1.5f);
+      
+      // Dotted pattern uses more skips than dashed
+      const int skip_pattern = is_dotted ? 3 : 2;
+      
+      for (size_t i = 0; i < boundary.size(); ++i) {
+        // Skip segments for dashed/dotted effect
+        if (static_cast<int>(i) % skip_pattern != 1) continue;
+        
+        const Ogre::Vector2& p0 = boundary[i];
+        const Ogre::Vector2& p1 = boundary[(i + 1) % boundary.size()];
+        
+        // Calculate perpendicular for line width
+        Ogre::Vector2 dir = p1 - p0;
+        float len = dir.normalise();
+        if (len < 0.001f) continue;
+        
+        Ogre::Vector2 perp(-dir.y * line_width, dir.x * line_width);
+        
+        Ogre::Vector2 v0 = p0 - perp;
+        Ogre::Vector2 v1 = p0 + perp;
+        Ogre::Vector2 v2 = p1 + perp;
+        Ogre::Vector2 v3 = p1 - perp;
+        
+        const float z_line = z_pos + (sigma_mult == 3.0f ? 0.003f : 0.006f);
+        
+        safety_margin_mo_->position(v0.x, v0.y, z_line); safety_margin_mo_->colour(line_color);
+        safety_margin_mo_->position(v1.x, v1.y, z_line); safety_margin_mo_->colour(line_color);
+        safety_margin_mo_->position(v2.x, v2.y, z_line); safety_margin_mo_->colour(line_color);
+        
+        safety_margin_mo_->position(v0.x, v0.y, z_line); safety_margin_mo_->colour(line_color);
+        safety_margin_mo_->position(v2.x, v2.y, z_line); safety_margin_mo_->colour(line_color);
+        safety_margin_mo_->position(v3.x, v3.y, z_line); safety_margin_mo_->colour(line_color);
+      }
+    }
+  }
+  
+  safety_margin_mo_->end();
 }
 
 }  // namespace rendering

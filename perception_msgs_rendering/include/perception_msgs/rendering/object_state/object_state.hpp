@@ -245,6 +245,15 @@ class ObjectState {
   void setYawUncertaintyAlpha(const float& alpha);
   void setYawUncertaintyConeLength(const float& length);
 
+  // Safety margin visualization
+  void setVisualizeSafetyMargins(const bool& val);
+  void setSafetyMarginColor(const Ogre::ColourValue& color);
+  void setSafetyMarginColor2Sigma(const Ogre::ColourValue& color);
+  void setSafetyMarginColor3Sigma(const Ogre::ColourValue& color);
+  void setSafetyMarginAlpha(const float& alpha);
+  void setSafetyMargin2Sigma(const bool& val);
+  void setSafetyMargin3Sigma(const bool& val);
+
   /**
    * @brief Set the Bounding Box Dimensions explicitly (e.g. for EgoData where dimensions are not part of the EGO-State-Model)
    *
@@ -417,6 +426,17 @@ class ObjectState {
    */
   void visualizeYawUncertaintyCone(const perception_msgs::msg::ObjectState& state, const Ogre::ColourValue& color);
 
+  /**
+   * @brief Visualize safety margins as expanded bounding box or circle based on uncertainty
+   *
+   * @param state
+   * @param color_2sigma Color for 2-sigma (95% confidence) margin
+   * @param color_3sigma Color for 3-sigma (99.7% confidence) margin
+   */
+  void visualizeSafetyMargins(const perception_msgs::msg::ObjectState& state, 
+                              const Ogre::ColourValue& color_2sigma,
+                              const Ogre::ColourValue& color_3sigma);
+
   Ogre::SceneNode* scene_node_;
   Ogre::SceneNode* mesh_node_;
   Ogre::SceneManager* scene_manager_;
@@ -500,8 +520,19 @@ class ObjectState {
   float yaw_uncertainty_cone_length_ = 3.0f;
   Ogre::ManualObject* xy_uncertainty_mo_ = nullptr;
   Ogre::ManualObject* yaw_uncertainty_mo_ = nullptr;
+  Ogre::ManualObject* safety_margin_mo_ = nullptr;
   std::string xy_uncertainty_material_name_ = "ObjectUncertainty/XYEllipse";
   std::string yaw_uncertainty_material_name_ = "ObjectUncertainty/YawCone";
+  std::string safety_margin_material_name_ = "ObjectUncertainty/SafetyMargin";
+
+  // Safety margin params
+  bool visualize_safety_margins_ = false;
+  Ogre::ColourValue safety_margin_color_ = Ogre::ColourValue(1.0f, 0.3f, 0.0f, 0.6f);
+  Ogre::ColourValue safety_margin_color_2sigma_ = Ogre::ColourValue(1.0f, 0.78f, 0.0f, 0.8f);  // Yellow-orange
+  Ogre::ColourValue safety_margin_color_3sigma_ = Ogre::ColourValue(1.0f, 0.31f, 0.0f, 0.8f);  // Red-orange
+  float safety_margin_alpha_ = 0.6f;
+  bool safety_margin_2sigma_ = true;
+  bool safety_margin_3sigma_ = false;
 
   const double kFixedMeshHeightCar = 1.5;
   const double kFixedMeshHeightTruck = 4.0;

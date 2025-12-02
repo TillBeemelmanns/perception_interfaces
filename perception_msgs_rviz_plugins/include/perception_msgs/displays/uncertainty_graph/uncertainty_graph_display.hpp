@@ -24,6 +24,7 @@ SOFTWARE.
 
 #pragma once
 
+#include <deque>
 #include <mutex>
 
 #include "perception_msgs/msg/object_list.hpp"
@@ -47,18 +48,22 @@ namespace perception_msgs {
 namespace displays {
 
 /**
- * @brief Futuristic overlay showing mean perception certainty as dual vertical bar charts.
+ * @brief Futuristic temporal uncertainty graph overlay showing classification and regression
+ *        certainty history over time as animated line charts.
  * 
- * Shows both classification certainty (from classification probabilities) and
- * regression certainty (from state covariances) side by side.
+ * Displays a time-series graph with:
+ * - Classification certainty (derived from classification probabilities)
+ * - Regression certainty (derived from state covariances)
+ * - Threshold indicators and grid lines
+ * - Futuristic styling with gradient fills and glow effects
  */
-class AttentionUncertaintyDisplay
+class UncertaintyGraphDisplay
   : public rviz_common::MessageFilterDisplay<perception_msgs::msg::ObjectList> {
   Q_OBJECT
 
 public:
-  AttentionUncertaintyDisplay();
-  ~AttentionUncertaintyDisplay() override;
+  UncertaintyGraphDisplay();
+  ~UncertaintyGraphDisplay() override;
 
   void onInitialize() override;
   void onEnable() override;
@@ -68,79 +73,90 @@ public:
 protected:
   void processMessage(perception_msgs::msg::ObjectList::ConstSharedPtr msg) override;
 
-private slots:
+private Q_SLOTS:
   void updatePosition();
   void updateSize();
-  void updateTransparency();
-  void updateThresholds();
-  void updateSmoothing();
-  void updateTitle();
+  void updateAppearance();
 
 private:
-  void createHUDOverlay();
-  void destroyHUDOverlay();
-  void updateHUD();
+  void createOverlay();
+  void destroyOverlay();
+  void updateGraph();
+  void drawGraph(QPainter& painter);
   double computeClassificationCertainty(const perception_msgs::msg::ObjectList& objects) const;
   double computeRegressionCertainty(const perception_msgs::msg::ObjectList& objects) const;
-  QColor barColorForCertainty(double certainty, bool blink_on) const;
 
-  rviz_common::properties::IntProperty* hud_width_property_;
-  rviz_common::properties::IntProperty* hud_height_property_;
-  rviz_common::properties::IntProperty* hud_left_property_;
-  rviz_common::properties::IntProperty* hud_top_property_;
-  rviz_common::properties::FloatProperty* hud_alpha_property_;
+  // Position and size properties
+  rviz_common::properties::IntProperty* width_property_;
+  rviz_common::properties::IntProperty* height_property_;
+  rviz_common::properties::IntProperty* left_property_;
+  rviz_common::properties::IntProperty* top_property_;
+  
+  // Appearance properties
+  rviz_common::properties::FloatProperty* alpha_property_;
   rviz_common::properties::FloatProperty* bg_alpha_property_;
+  rviz_common::properties::IntProperty* history_length_property_;
+  rviz_common::properties::FloatProperty* smoothing_property_;
+  rviz_common::properties::StringProperty* title_property_;
+  
+  // Line colors
+  rviz_common::properties::ColorProperty* class_color_property_;
+  rviz_common::properties::ColorProperty* regr_color_property_;
+  
+  // Threshold properties for regression certainty calculation
+  rviz_common::properties::FloatProperty* max_variance_property_;
+  
+  // Threshold line properties
+  rviz_common::properties::BoolProperty* show_thresholds_property_;
   rviz_common::properties::FloatProperty* high_threshold_property_;
   rviz_common::properties::FloatProperty* low_threshold_property_;
-  rviz_common::properties::FloatProperty* blink_threshold_property_;
-  rviz_common::properties::FloatProperty* blink_frequency_property_;
-  rviz_common::properties::FloatProperty* smoothing_alpha_property_;
-  rviz_common::properties::ColorProperty* high_color_property_;
-  rviz_common::properties::ColorProperty* mid_color_property_;
-  rviz_common::properties::ColorProperty* low_color_property_;
-  rviz_common::properties::StringProperty* title_text_property_;
-  rviz_common::properties::ColorProperty* regression_high_color_property_;
-  rviz_common::properties::ColorProperty* regression_mid_color_property_;
-  rviz_common::properties::ColorProperty* regression_low_color_property_;
-  rviz_common::properties::FloatProperty* max_variance_property_;
+  rviz_common::properties::ColorProperty* high_threshold_color_property_;
+  rviz_common::properties::ColorProperty* low_threshold_color_property_;
 
-  int hud_width_;
-  int hud_height_;
-  int hud_left_;
-  int hud_top_;
-  float hud_alpha_;
+  // Cached values
+  int width_;
+  int height_;
+  int left_;
+  int top_;
+  float alpha_;
   float bg_alpha_;
+  int history_length_;
+  float smoothing_;
+  QString title_;
+  QColor class_color_;
+  QColor regr_color_;
+  float max_variance_;
+  bool show_thresholds_;
   float high_threshold_;
   float low_threshold_;
-  float blink_threshold_;
-  float blink_frequency_;
-  float smoothing_alpha_;
-  QColor high_color_;
-  QColor mid_color_;
-  QColor low_color_;
-  QString title_text_;
-  QColor regression_high_color_;
-  QColor regression_mid_color_;
-  QColor regression_low_color_;
-  float max_variance_;
+  QColor high_threshold_color_;
+  QColor low_threshold_color_;
 
-  double smoothed_classification_certainty_;
-  double smoothed_regression_certainty_;
-  bool have_classification_certainty_;
-  bool have_regression_certainty_;
+  // State
+  double smoothed_classification_;
+  double smoothed_regression_;
   bool update_required_;
-  bool blink_state_;
-  double blink_timer_;
+  float animation_time_;
 
+  // History buffers
+  std::deque<double> classification_history_;
+  std::deque<double> regression_history_;
+  std::mutex history_mutex_;
+
+  // Ogre overlay
   Ogre::Overlay* overlay_;
   Ogre::PanelOverlayElement* panel_;
-  Ogre::MaterialPtr panel_material_;
   Ogre::TexturePtr texture_;
+  Ogre::MaterialPtr material_;
+  std::string overlay_name_;
+  std::string panel_name_;
+  std::string texture_name_;
+  std::string material_name_;
 
-  std::mutex hud_mutex_;
-
-  static constexpr int kDefaultWidth = 180;
-  static constexpr int kDefaultHeight = 220;
+  static constexpr int kDefaultWidth = 280;
+  static constexpr int kDefaultHeight = 120;
+  static constexpr int kDefaultHistoryLength = 60;
+  static constexpr float kDefaultSmoothing = 0.85f;
 };
 
 }  // namespace displays

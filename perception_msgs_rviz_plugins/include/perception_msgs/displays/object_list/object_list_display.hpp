@@ -102,6 +102,12 @@ protected:
   rviz_common::properties::FloatProperty *yaw_uncertainty_alpha_;
   rviz_common::properties::FloatProperty *yaw_uncertainty_cone_length_;
 
+  // Safety margin visualization
+  rviz_common::properties::BoolProperty *viz_safety_margins_;
+  rviz_common::properties::ColorProperty *safety_margin_color_2sigma_;
+  rviz_common::properties::ColorProperty *safety_margin_color_3sigma_;
+  rviz_common::properties::FloatProperty *safety_margin_alpha_;
+
   // Color by Classification (applies to multiple modes)
   rviz_common::properties::BoolProperty *color_property_group_;
   rviz_common::properties::ColorProperty *color_property_pedestrian_;

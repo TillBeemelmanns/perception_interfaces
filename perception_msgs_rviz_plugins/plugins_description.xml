@@ -110,4 +110,26 @@
     <message_type>perception_msgs/msg/ObjectList</message_type>
   </class>
 
+  <class
+    name="UncertaintyGraph"
+    type="perception_msgs::displays::UncertaintyGraphDisplay"
+    base_class_type="rviz_common::Display"
+  >
+    <description>
+      Temporal uncertainty graph overlay showing classification and regression certainty history over time.
+    </description>
+    <message_type>perception_msgs/msg/ObjectList</message_type>
+  </class>
+
+  <class
+    name="VehicleSensorHud"
+    type="perception_msgs::displays::VehicleSensorHudDisplay"
+    base_class_type="rviz_common::Display"
+  >
+    <description>
+      Vehicle sensor status HUD showing abstract top-down vehicle view with LiDAR sensor positions and perception status.
+    </description>
+    <message_type>perception_msgs/msg/ObjectList</message_type>
+  </class>
+
 </library>

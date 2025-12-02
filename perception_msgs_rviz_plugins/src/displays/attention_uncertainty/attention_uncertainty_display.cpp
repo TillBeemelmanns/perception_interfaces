@@ -29,11 +29,12 @@ SOFTWARE.
 #include <iomanip>
 #include <sstream>
 
+#include <QFont>
+#include <QFontMetrics>
 #include <QImage>
 #include <QLinearGradient>
 #include <QPainter>
-#include <QFont>
-#include <QFontMetrics>
+#include <QPainterPath>
 
 #include <OgreHardwarePixelBuffer.h>
 #include <OgreMaterialManager.h>
@@ -72,8 +73,8 @@ AttentionUncertaintyDisplay::AttentionUncertaintyDisplay()
   blink_frequency_(2.0f), smoothing_alpha_(0.6f),
   high_color_(0, 220, 120), mid_color_(255, 200, 40),
   low_color_(255, 70, 70), title_text_(QStringLiteral("Perception Certainty")),
-  regression_high_color_(100, 180, 255), regression_mid_color_(180, 130, 255),
-  regression_low_color_(255, 100, 180), max_variance_(10.0f),
+  regression_high_color_(140, 100, 255), regression_mid_color_(180, 120, 255),
+  regression_low_color_(220, 80, 180), max_variance_(10.0f),
   smoothed_classification_certainty_(0.0), smoothed_regression_certainty_(0.0),
   have_classification_certainty_(false), have_regression_certainty_(false),
   update_required_(false), blink_state_(false), blink_timer_(0.0),
@@ -523,8 +524,8 @@ void AttentionUncertaintyDisplay::updateHUD()
 
   QImage hud_image(static_cast<uchar*>(pixel_box.data), hud_width_, hud_height_, QImage::Format_ARGB32);
 
-  QColor background(10, 16, 24, static_cast<int>(bg_alpha_ * 255));
-  hud_image.fill(background.rgba());
+  // Clear to transparent first
+  hud_image.fill(Qt::transparent);
 
   QPainter painter(&hud_image);
   painter.setRenderHint(QPainter::Antialiasing, true);
@@ -532,11 +533,30 @@ void AttentionUncertaintyDisplay::updateHUD()
   const int margin = 12;
   const QRectF frame_rect(margin, margin, hud_width_ - 2 * margin, hud_height_ - 2 * margin);
 
-  QColor frame_color(80, 200, 255);
+  // Draw gradient background matching graph plot style
+  QLinearGradient bg_gradient(0, 0, 0, hud_height_);
+  bg_gradient.setColorAt(0.0, QColor(15, 25, 40, static_cast<int>(bg_alpha_ * 255 * 0.95)));
+  bg_gradient.setColorAt(0.5, QColor(20, 35, 55, static_cast<int>(bg_alpha_ * 255)));
+  bg_gradient.setColorAt(1.0, QColor(10, 20, 35, static_cast<int>(bg_alpha_ * 255 * 0.9)));
+  
+  QPainterPath bg_path;
+  bg_path.addRoundedRect(frame_rect, 8, 8);
+  painter.fillPath(bg_path, bg_gradient);
+  
+  // Subtle border glow (matching graph plot)
+  QPen border_pen(QColor(60, 140, 200, static_cast<int>(hud_alpha_ * 80)));
+  border_pen.setWidth(1);
+  painter.setPen(border_pen);
+  painter.drawPath(bg_path);
+  
+  // Inner border
+  QPainterPath inner_path;
+  inner_path.addRoundedRect(QRectF(margin + 1, margin + 1, hud_width_ - 2 * margin - 2, hud_height_ - 2 * margin - 2), 7, 7);
+  painter.setPen(QPen(QColor(40, 80, 120, static_cast<int>(hud_alpha_ * 60)), 1));
+  painter.drawPath(inner_path);
+
+  QColor frame_color(180, 210, 240);
   frame_color.setAlpha(static_cast<int>(hud_alpha_ * 255));
-  painter.setPen(QPen(frame_color, 2));
-  painter.setBrush(Qt::NoBrush);
-  painter.drawRoundedRect(frame_rect, 14, 14);
 
   QFont base_font = painter.font();
 
@@ -644,11 +664,11 @@ void AttentionUncertaintyDisplay::updateHUD()
 
   // Classification label
   painter.drawText(QRectF(class_bar_x - 10, bar_y + bar_height + 4, bar_width + 20, 16),
-                   Qt::AlignHCenter | Qt::AlignVCenter, QStringLiteral("CLASS"));
+                   Qt::AlignHCenter | Qt::AlignVCenter, QStringLiteral("CLS"));
 
   // Regression label
   painter.drawText(QRectF(regr_bar_x - 10, bar_y + bar_height + 4, bar_width + 20, 16),
-                   Qt::AlignHCenter | Qt::AlignVCenter, QStringLiteral("REGR"));
+                   Qt::AlignHCenter | Qt::AlignVCenter, QStringLiteral("REG"));
 
   // Percentage values
   QFont value_font = painter.font();
