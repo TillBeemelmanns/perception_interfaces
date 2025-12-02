@@ -228,16 +228,17 @@ void VehicleSensorHudDisplay::update(float wall_dt, float /*ros_dt*/) {
   pulse_phase_ += wall_dt * 3.0;
   if (pulse_phase_ > 2.0 * M_PI) pulse_phase_ -= 2.0 * M_PI;
   
-  // Update timeouts
+  // Update timeouts - but clamp wall_dt to reasonable value
+  float clamped_dt = std::min(wall_dt, 0.1f);  // Max 100ms per frame
   {
     std::lock_guard<std::mutex> lock(data_mutex_);
     for (auto& pair : lidar_status_) {
-      pair.second.last_msg_time += wall_dt;
+      pair.second.last_msg_time += clamped_dt;
       if (pair.second.last_msg_time > lidar_timeout_) {
         pair.second.active = false;
       }
     }
-    objectlist_last_update_ += wall_dt;
+    objectlist_last_update_ += clamped_dt;
     if (objectlist_last_update_ > 2.0) {
       has_objectlist_data_ = false;
     }
@@ -413,8 +414,18 @@ double VehicleSensorHudDisplay::computeOverallCertainty() const {
   return (smoothed_classification_ + smoothed_regression_) / 2.0;
 }
 
+static int updatehud_counter = 0;
+
 void VehicleSensorHudDisplay::updateHud() {
-  if (!texture_) return;
+  if (!texture_) {
+    RVIZ_COMMON_LOG_WARNING("VehicleSensorHudDisplay::updateHud() texture_ is null!");
+    return;
+  }
+  
+  if (++updatehud_counter % 30 == 0) {
+    RVIZ_COMMON_LOG_INFO_STREAM("VehicleSensorHudDisplay::updateHud() this=" << this 
+                                 << " has_objectlist_data_=" << has_objectlist_data_);
+  }
   
   Ogre::HardwarePixelBufferSharedPtr buffer = texture_->getBuffer();
   buffer->lock(Ogre::HardwareBuffer::HBL_DISCARD);
@@ -444,13 +455,15 @@ void VehicleSensorHudDisplay::drawHud(QPainter& painter) {
     cls_val = smoothed_classification_;
     reg_val = smoothed_regression_;
     obj_count = object_count_;
-  }
-  
-  // Debug - log this pointer and data
-  static int draw_counter = 0;
-  if (++draw_counter % 60 == 0) {
-    RVIZ_COMMON_LOG_INFO_STREAM("VehicleSensorHudDisplay::drawHud() this=" << this 
-                                 << " has_data=" << has_data << " cls=" << cls_val);
+    
+    // Debug - log inside lock
+    static int draw_counter = 0;
+    if (++draw_counter % 30 == 0) {
+      RVIZ_COMMON_LOG_INFO_STREAM("VehicleSensorHudDisplay::drawHud() this=" << this 
+                                   << " has_data=" << has_data 
+                                   << " objectlist_last_update_=" << objectlist_last_update_
+                                   << " cls=" << cls_val);
+    }
   }
   
   // Background
