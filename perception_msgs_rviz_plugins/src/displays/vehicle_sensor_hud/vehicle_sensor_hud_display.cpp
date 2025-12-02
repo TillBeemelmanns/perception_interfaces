@@ -60,7 +60,7 @@ VehicleSensorHudDisplay::VehicleSensorHudDisplay()
     lidar_timeout_(1.0f),
     object_count_(0), smoothed_classification_(0.0), smoothed_regression_(0.0),
     has_objectlist_data_(false), objectlist_last_update_(0.0),
-    flow_phase_(0.0), pulse_phase_(0.0),
+    flow_phase_(0.0), pulse_phase_(0.0), rotation_phase_(0.0),
     overlay_(nullptr), panel_(nullptr),
     update_required_(false)
 {
@@ -215,12 +215,18 @@ void VehicleSensorHudDisplay::updateLidarTopics() {
 }
 
 void VehicleSensorHudDisplay::update(float wall_dt, float /*ros_dt*/) {
+  // Clamp wall_dt to prevent huge jumps during startup or lag
+  float clamped_anim_dt = std::min(wall_dt, 0.05f);
+  
   // Animation phases
-  flow_phase_ += wall_dt * 1.5;  // Flow speed for particles
+  flow_phase_ += clamped_anim_dt * 1.5;  // Flow speed for particles
   if (flow_phase_ > 1.0) flow_phase_ -= 1.0;
   
-  pulse_phase_ += wall_dt * 1.5;  // Slower pulse (was 4.0)
+  pulse_phase_ += clamped_anim_dt * 1.5;  // Slower pulse (was 4.0)
   if (pulse_phase_ > 2.0 * M_PI) pulse_phase_ -= 2.0 * M_PI;
+  
+  rotation_phase_ += clamped_anim_dt * 0.15;  // Very slow rotation (~42 sec per revolution)
+  if (rotation_phase_ > 2.0 * M_PI) rotation_phase_ -= 2.0 * M_PI;
   
   // Update timeouts - clamp wall_dt to prevent huge jumps
   float clamped_dt = std::min(wall_dt, 0.1f);
@@ -475,20 +481,30 @@ void VehicleSensorHudDisplay::drawHud(QPainter& painter) {
 
 void VehicleSensorHudDisplay::drawWireframeVan(QPainter& painter, const QRectF& bounds) {
   const double cx = bounds.center().x();
-  const double cy = bounds.center().y();
+  const double cy = bounds.center().y() + bounds.height() * 0.18;  // Move van lower to fit rectangle
   
-  // Isometric projection
-  const double iso_x = 0.866;
-  const double iso_y = 0.5;
+  // Animated rotation angle
+  const double angle = rotation_phase_;
+  const double cos_a = std::cos(angle);
+  const double sin_a = std::sin(angle);
+  
+  // Isometric projection parameters
+  const double iso_x = 0.9;
+  const double iso_y = 0.4;
   
   // Van dimensions
   const double length = bounds.width() * 0.6;
   const double van_width = bounds.width() * 0.35;
   const double van_height = bounds.height() * 0.25;
   
+  // Transform 3D point to 2D with rotation
   auto to2D = [&](double x, double y, double z) -> QPointF {
-    double px = cx + (x - y) * iso_x;
-    double py = cy + (x + y) * iso_y - z;
+    // Rotate around Z axis
+    double rx = x * cos_a - y * sin_a;
+    double ry = x * sin_a + y * cos_a;
+    // Isometric projection
+    double px = cx + (rx - ry) * iso_x;
+    double py = cy + (rx + ry) * iso_y - z;
     return QPointF(px, py);
   };
   
@@ -558,11 +574,12 @@ void VehicleSensorHudDisplay::drawWireframeVan(QPainter& painter, const QRectF& 
   // Center point
   QPointF center = to2D(0, 0, h * 0.5);
   
-  // LiDAR positions
-  QPointF lidar_fl = to2D(-l2 * 0.9, -w2 * 0.9, h * 0.3);
-  QPointF lidar_fr = to2D(-l2 * 0.9, w2 * 0.9, h * 0.3);
-  QPointF lidar_rl = to2D(l2 * 0.9, -w2 * 0.9, h * 0.3);
-  QPointF lidar_rr = to2D(l2 * 0.9, w2 * 0.9, h * 0.3);
+  // LiDAR positions - directly at the roof corner nodes
+  // Note: FR and FL are swapped to match visual orientation
+  QPointF lidar_fl = r_fr;
+  QPointF lidar_fr = r_fl;
+  QPointF lidar_rl = r_rr;
+  QPointF lidar_rr = r_rl;
   
   // Get status under lock
   bool fl_active, fr_active, rl_active, rr_active, has_data;
@@ -765,13 +782,7 @@ void VehicleSensorHudDisplay::drawHealthIndicator(QPainter& painter,
 }
 
 void VehicleSensorHudDisplay::drawStatusPanel(QPainter& painter, const QRectF& bounds) {
-  // Background
-  QPainterPath panel;
-  panel.addRoundedRect(bounds, 6, 6);
-  painter.fillPath(panel, QColor(10, 20, 35, static_cast<int>(alpha_ * 150)));
-  painter.setPen(QPen(QColor(50, 100, 150, static_cast<int>(alpha_ * 80)), 1));
-  painter.drawPath(panel);
-  
+  // No background box - just text rows
   const double row_h = bounds.height() / 4;
   
   QFont label_font("Segoe UI", 7);

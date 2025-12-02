@@ -157,6 +157,7 @@ private:
   // Animation
   double flow_phase_;
   double pulse_phase_;
+  double rotation_phase_;  // For rotating the 3D van mesh
   
   // Overlay
   std::string overlay_name_, panel_name_, material_name_, texture_name_;
