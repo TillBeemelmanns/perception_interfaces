@@ -571,8 +571,11 @@ void VehicleSensorHudDisplay::drawWireframeVan(QPainter& painter, const QRectF& 
   painter.setPen(QPen(accent, 1));
   painter.drawLine(r_fl, r_fr);
   
-  // Center point
-  QPointF center = to2D(0, 0, h * 0.5);
+  // PROC center point (processing node)
+  QPointF proc_center = to2D(0, 0, h * 0.3);
+  
+  // DET node (detector) - positioned above PROC
+  QPointF det_center = to2D(0, 0, h * 0.9);
   
   // LiDAR positions - directly at the roof corner nodes
   // Note: FR and FL are swapped to match visual orientation
@@ -592,11 +595,14 @@ void VehicleSensorHudDisplay::drawWireframeVan(QPainter& painter, const QRectF& 
     has_data = has_objectlist_data_;
   }
   
-  // Draw animated data flow lines
-  drawDataFlowLine(painter, lidar_fl, center, fl_active, flow_phase_, pulse_phase_);
-  drawDataFlowLine(painter, lidar_fr, center, fr_active, flow_phase_ + 0.25, pulse_phase_);
-  drawDataFlowLine(painter, lidar_rl, center, rl_active, flow_phase_ + 0.5, pulse_phase_);
-  drawDataFlowLine(painter, lidar_rr, center, rr_active, flow_phase_ + 0.75, pulse_phase_);
+  // Draw animated data flow lines from LiDARs to DET
+  drawDataFlowLine(painter, lidar_fl, det_center, fl_active, flow_phase_, pulse_phase_);
+  drawDataFlowLine(painter, lidar_fr, det_center, fr_active, flow_phase_ + 0.25, pulse_phase_);
+  drawDataFlowLine(painter, lidar_rl, det_center, rl_active, flow_phase_ + 0.5, pulse_phase_);
+  drawDataFlowLine(painter, lidar_rr, det_center, rr_active, flow_phase_ + 0.75, pulse_phase_);
+  
+  // Draw vertical data flow line from DET to PROC (only active when we have detections)
+  drawDataFlowLine(painter, det_center, proc_center, has_data, flow_phase_, pulse_phase_);
   
   // Draw LiDAR indicators
   drawHealthIndicator(painter, lidar_fl, "FL", fl_active);
@@ -604,46 +610,74 @@ void VehicleSensorHudDisplay::drawWireframeVan(QPainter& painter, const QRectF& 
   drawHealthIndicator(painter, lidar_rl, "RL", rl_active);
   drawHealthIndicator(painter, lidar_rr, "RR", rr_active);
   
-  // Center processing indicator
+  // Animation pulse
   double pulse = 0.5 + 0.5 * std::sin(pulse_phase_);
   int active_count = (fl_active ? 1 : 0) + (fr_active ? 1 : 0) + 
                      (rl_active ? 1 : 0) + (rr_active ? 1 : 0);
   
-  QColor center_color;
-  if (active_count == 4 && has_data) {
-    center_color = healthy_color_;
+  // DET (Detector) indicator - color based on LiDAR input
+  QColor det_color;
+  if (active_count == 4) {
+    det_color = healthy_color_;
   } else if (active_count >= 2) {
-    center_color = warning_color_;
+    det_color = warning_color_;
   } else {
-    center_color = unhealthy_color_;
+    det_color = unhealthy_color_;
   }
   
-  // Pulsing glow when healthy
-  double glow_size = (center_color == healthy_color_) ? 20 + 5 * pulse : 20;
-  QRadialGradient glow(center, glow_size);
-  QColor glow_col = center_color;
-  glow_col.setAlpha(static_cast<int>(alpha_ * 80 * pulse));
+  // DET core
+  double det_core_size = (det_color == healthy_color_) ? 7 + 1.5 * pulse : 7;
+  QRadialGradient det_core(det_center, det_core_size);
+  det_core.setColorAt(0.0, det_color.lighter(150));
+  det_core.setColorAt(0.7, det_color);
+  det_core.setColorAt(1.0, det_color.darker(120));
+  painter.setBrush(det_core);
+  painter.setPen(QPen(det_color.lighter(130), 1));
+  painter.drawEllipse(det_center, det_core_size, det_core_size);
+  
+  // DET Label
+  QFont det_font("Consolas", 6, QFont::Bold);
+  painter.setFont(det_font);
+  painter.setPen(QColor(180, 210, 240, static_cast<int>(alpha_ * 200)));
+  painter.drawText(QRectF(det_center.x() - 15, det_center.y() - 20, 30, 12), 
+                   Qt::AlignCenter, "DET");
+  
+  // PROC (Processing) indicator - color based on detection output
+  QColor proc_color;
+  if (has_data && active_count >= 2) {
+    proc_color = healthy_color_;
+  } else if (active_count >= 2) {
+    proc_color = warning_color_;
+  } else {
+    proc_color = unhealthy_color_;
+  }
+  
+  // PROC glow when healthy
+  double glow_size = (proc_color == healthy_color_) ? 18 + 4 * pulse : 18;
+  QRadialGradient glow(proc_center, glow_size);
+  QColor glow_col = proc_color;
+  glow_col.setAlpha(static_cast<int>(alpha_ * 70 * pulse));
   glow.setColorAt(0.0, glow_col);
   glow.setColorAt(1.0, Qt::transparent);
   painter.setBrush(glow);
   painter.setPen(Qt::NoPen);
-  painter.drawEllipse(center, glow_size, glow_size);
+  painter.drawEllipse(proc_center, glow_size, glow_size);
   
-  // Core with heartbeat effect
-  double core_size = (center_color == healthy_color_) ? 8 + 2 * pulse : 8;
-  QRadialGradient core(center, core_size);
-  core.setColorAt(0.0, center_color.lighter(150));
-  core.setColorAt(0.7, center_color);
-  core.setColorAt(1.0, center_color.darker(120));
+  // PROC core with heartbeat effect
+  double core_size = (proc_color == healthy_color_) ? 8 + 2 * pulse : 8;
+  QRadialGradient core(proc_center, core_size);
+  core.setColorAt(0.0, proc_color.lighter(150));
+  core.setColorAt(0.7, proc_color);
+  core.setColorAt(1.0, proc_color.darker(120));
   painter.setBrush(core);
-  painter.setPen(QPen(center_color.lighter(130), 1));
-  painter.drawEllipse(center, core_size, core_size);
+  painter.setPen(QPen(proc_color.lighter(130), 1));
+  painter.drawEllipse(proc_center, core_size, core_size);
   
-  // Label
+  // PROC Label
   QFont font("Consolas", 6, QFont::Bold);
   painter.setFont(font);
   painter.setPen(QColor(180, 210, 240, static_cast<int>(alpha_ * 200)));
-  painter.drawText(QRectF(center.x() - 15, center.y() + 14, 30, 12), 
+  painter.drawText(QRectF(proc_center.x() - 15, proc_center.y() + 14, 30, 12), 
                    Qt::AlignCenter, "PROC");
 }
 
@@ -830,7 +864,7 @@ void VehicleSensorHudDisplay::drawStatusPanel(QPainter& painter, const QRectF& b
       status_txt = "HEALTHY";
     } else if (overall >= low_threshold_ && active >= 2) {
       status_col = warning_color_;
-      status_txt = "DEGRADED";
+      status_txt = "UNCERTAIN";
     } else {
       status_col = unhealthy_color_;
       status_txt = "CRITICAL";
