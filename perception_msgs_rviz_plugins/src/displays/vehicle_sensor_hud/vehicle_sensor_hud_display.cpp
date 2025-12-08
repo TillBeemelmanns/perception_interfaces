@@ -448,7 +448,17 @@ void VehicleSensorHudDisplay::drawHud(QPainter& painter) {
   painter.setPen(QPen(QColor(60, 140, 200, static_cast<int>(alpha_ * 80)), 1));
   painter.drawPath(bg_path);
   
-  // Title with live status
+  // Main title (configurable "System Health")
+  if (!title_.isEmpty()) {
+    QFont main_title_font("Segoe UI", 11, QFont::Bold);
+    main_title_font.setLetterSpacing(QFont::PercentageSpacing, 110);
+    painter.setFont(main_title_font);
+    painter.setPen(QColor(180, 210, 240, static_cast<int>(alpha_ * 255)));
+    painter.drawText(QRectF(margin, margin, width_ - 2*margin, 22),
+                     Qt::AlignHCenter | Qt::AlignVCenter, title_);
+  }
+  
+  // Status subtitle with live data
   QFont title_font("Segoe UI", 9, QFont::Bold);
   title_font.setLetterSpacing(QFont::PercentageSpacing, 105);
   painter.setFont(title_font);
@@ -464,22 +474,25 @@ void VehicleSensorHudDisplay::drawHud(QPainter& painter) {
     title_text = "NO DATA";
     painter.setPen(QColor(255, 70, 70, static_cast<int>(alpha_ * 255)));
   }
-  painter.drawText(QRectF(margin, margin, width_ - 2*margin, 20),
+  // Draw status below the main title
+  const int status_y = title_.isEmpty() ? margin : margin + 22;
+  painter.drawText(QRectF(margin, status_y, width_ - 2*margin, 20),
                    Qt::AlignHCenter | Qt::AlignVCenter, title_text);
   
-  // Vehicle area
-  const int title_h = 28;
+  // Vehicle area - adjusted to account for title + status
+  const int header_h = title_.isEmpty() ? 28 : 48;  // More space when title is shown
   const int status_h = 70;
-  QRectF veh_bounds(margin, title_h, width_ - 2*margin, height_ - title_h - status_h - margin);
+  QRectF veh_bounds(margin, header_h, width_ - 2*margin, height_ - header_h - status_h - margin);
   
-  drawWireframeVan(painter, veh_bounds);
+  drawWireframeVan(painter, veh_bounds, cls_val, reg_val, has_data);
   
   // Status panel
   QRectF status_bounds(margin, height_ - status_h - margin, width_ - 2*margin, status_h);
   drawStatusPanel(painter, status_bounds);
 }
 
-void VehicleSensorHudDisplay::drawWireframeVan(QPainter& painter, const QRectF& bounds) {
+void VehicleSensorHudDisplay::drawWireframeVan(QPainter& painter, const QRectF& bounds,
+                                                double cls_certainty, double reg_certainty, bool has_data) {
   const double cx = bounds.center().x();
   const double cy = bounds.center().y() + bounds.height() * 0.18;  // Move van lower to fit rectangle
   
@@ -584,15 +597,14 @@ void VehicleSensorHudDisplay::drawWireframeVan(QPainter& painter, const QRectF& 
   QPointF lidar_rl = r_rr;
   QPointF lidar_rr = r_rl;
   
-  // Get status under lock
-  bool fl_active, fr_active, rl_active, rr_active, has_data;
+  // Get LiDAR status under lock
+  bool fl_active, fr_active, rl_active, rr_active;
   {
     std::lock_guard<std::mutex> lock(data_mutex_);
     fl_active = lidar_status_.at("FL").active;
     fr_active = lidar_status_.at("FR").active;
     rl_active = lidar_status_.at("RL").active;
     rr_active = lidar_status_.at("RR").active;
-    has_data = has_objectlist_data_;
   }
   
   // Draw animated data flow lines from LiDARs to DET
@@ -615,14 +627,21 @@ void VehicleSensorHudDisplay::drawWireframeVan(QPainter& painter, const QRectF& 
   int active_count = (fl_active ? 1 : 0) + (fr_active ? 1 : 0) + 
                      (rl_active ? 1 : 0) + (rr_active ? 1 : 0);
   
-  // DET (Detector) indicator - color based on LiDAR input
+  // Compute average certainty for detection health assessment
+  const double avg_certainty = (cls_certainty + reg_certainty) / 2.0;
+  const bool certainty_ok = avg_certainty >= static_cast<double>(high_threshold_);
+  const bool certainty_warning = avg_certainty >= static_cast<double>(low_threshold_) && !certainty_ok;
+  
+  // DET (Detector) indicator - color based on LiDAR input AND detection certainty
   QColor det_color;
-  if (active_count == 4) {
-    det_color = healthy_color_;
+  if (active_count == 4 && has_data && certainty_ok) {
+    det_color = healthy_color_;  // All LiDARs active, data present, high certainty
+  } else if (active_count >= 2 && has_data && (certainty_ok || certainty_warning)) {
+    det_color = warning_color_;  // Some inputs or moderate certainty
   } else if (active_count >= 2) {
-    det_color = warning_color_;
+    det_color = warning_color_;  // No data but LiDARs working
   } else {
-    det_color = unhealthy_color_;
+    det_color = unhealthy_color_;  // Critical: few LiDARs or no data with low certainty
   }
   
   // DET core
@@ -642,14 +661,18 @@ void VehicleSensorHudDisplay::drawWireframeVan(QPainter& painter, const QRectF& 
   painter.drawText(QRectF(det_center.x() - 15, det_center.y() - 20, 30, 12), 
                    Qt::AlignCenter, "DET");
   
-  // PROC (Processing) indicator - color based on detection output
+  // PROC (Processing) indicator - color based on detection output AND certainty
   QColor proc_color;
-  if (has_data && active_count >= 2) {
-    proc_color = healthy_color_;
+  if (has_data && active_count >= 2 && certainty_ok) {
+    proc_color = healthy_color_;  // Data present, good inputs, high certainty
+  } else if (has_data && active_count >= 2 && certainty_warning) {
+    proc_color = warning_color_;  // Data present but uncertain detections
+  } else if (has_data && active_count >= 2) {
+    proc_color = warning_color_;  // Data present but low certainty
   } else if (active_count >= 2) {
-    proc_color = warning_color_;
+    proc_color = warning_color_;  // No data but LiDARs working
   } else {
-    proc_color = unhealthy_color_;
+    proc_color = unhealthy_color_;  // Critical failure
   }
   
   // PROC glow when healthy

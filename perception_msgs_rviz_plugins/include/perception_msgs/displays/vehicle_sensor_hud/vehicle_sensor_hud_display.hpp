@@ -87,7 +87,8 @@ private:
   void destroyOverlay();
   void updateHud();
   void drawHud(QPainter& painter);
-  void drawWireframeVan(QPainter& painter, const QRectF& bounds);
+  void drawWireframeVan(QPainter& painter, const QRectF& bounds, 
+                        double cls_certainty, double reg_certainty, bool has_data);
   void drawDataFlowLine(QPainter& painter, const QPointF& from, const QPointF& to,
                         bool healthy, double phase, double pulse);
   void drawHealthIndicator(QPainter& painter, const QPointF& pos, 

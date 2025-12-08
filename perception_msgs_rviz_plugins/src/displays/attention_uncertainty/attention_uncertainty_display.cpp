@@ -77,7 +77,7 @@ AttentionUncertaintyDisplay::AttentionUncertaintyDisplay()
   regression_low_color_(220, 80, 180), max_variance_(10.0f),
   smoothed_classification_certainty_(0.0), smoothed_regression_certainty_(0.0),
   have_classification_certainty_(false), have_regression_certainty_(false),
-  update_required_(false), blink_state_(false), blink_timer_(0.0),
+  update_required_(false), blink_state_(false), blink_timer_(0.0), no_data_timer_(0.0),
   overlay_(nullptr), panel_(nullptr)
 {
   hud_width_property_ = new rviz_common::properties::IntProperty(
@@ -247,6 +247,9 @@ void AttentionUncertaintyDisplay::processMessage(perception_msgs::msg::ObjectLis
 
   std::lock_guard<std::mutex> lock(hud_mutex_);
 
+  // Reset no-data timer on message receipt
+  no_data_timer_ = 0.0;
+
   // Smooth classification certainty
   if (!have_classification_certainty_) {
     smoothed_classification_certainty_ = classification_certainty;
@@ -284,10 +287,27 @@ void AttentionUncertaintyDisplay::update(float wall_dt, float /*ros_dt*/)
   {
     std::lock_guard<std::mutex> lock(hud_mutex_);
 
-    const bool critical = have_classification_certainty_ && (smoothed_classification_certainty_ <= static_cast<double>(blink_threshold_));
+    // Clamp wall_dt to prevent huge jumps
+    const float clamped_dt = std::min(wall_dt, 0.1f);
+    
+    // Update no-data timer
+    no_data_timer_ += clamped_dt;
+    const bool no_data = no_data_timer_ >= kNoDataTimeout;
+    
+    // Check for warning conditions:
+    // 1. No data arriving (timeout)
+    // 2. Suspiciously low certainty (below 15%)
+    // 3. Critical threshold (existing blink_threshold_)
+    const bool suspiciously_low = have_classification_certainty_ && 
+                                   (smoothed_classification_certainty_ <= kSuspiciouslyLowThreshold);
+    const bool critical = have_classification_certainty_ && 
+                          (smoothed_classification_certainty_ <= static_cast<double>(blink_threshold_));
+    
+    // Trigger blinking for any warning condition
+    const bool should_blink = no_data || suspiciously_low || critical;
 
-    if (critical && blink_frequency_ > kClampEpsilon) {
-      blink_timer_ += wall_dt;
+    if (should_blink && blink_frequency_ > kClampEpsilon) {
+      blink_timer_ += clamped_dt;
       const double half_period = 0.5 / static_cast<double>(blink_frequency_);
       if (blink_timer_ >= half_period) {
         blink_state_ = !blink_state_;
@@ -587,15 +607,33 @@ void AttentionUncertaintyDisplay::updateHUD()
   const int regr_bar_x = start_x + bar_width + bar_spacing;
   const int bar_y = bar_top + 6;
 
+  // Check warning conditions
+  const bool no_data = no_data_timer_ >= kNoDataTimeout;
+  const bool suspiciously_low_cls = have_classification_certainty_ && 
+                                     (smoothed_classification_certainty_ <= kSuspiciouslyLowThreshold);
+  const bool suspiciously_low_reg = have_regression_certainty_ && 
+                                     (smoothed_regression_certainty_ <= kSuspiciouslyLowThreshold);
+
   // Helper lambda to draw a bar with outline and fill
   auto drawBar = [&](int bar_x, double certainty, bool have_data, 
                      const QColor& high_col, const QColor& mid_col, const QColor& low_col,
-                     bool is_classification) {
-    // Bar outline
+                     bool is_classification, bool show_warning) {
+    // Bar outline - red border when warning
     const QRect bar_outline(bar_x, bar_y, bar_width, bar_height);
     QColor bar_outline_color = frame_color;
-    bar_outline_color.setAlpha(static_cast<int>(hud_alpha_ * 200));
-    painter.setPen(QPen(bar_outline_color, 2));
+    
+    // Red pulsing border when warning condition
+    if (show_warning && blink_state_) {
+      bar_outline_color = low_color_;
+      bar_outline_color.setAlpha(255);
+    } else if (show_warning) {
+      bar_outline_color = low_color_;
+      bar_outline_color.setAlpha(static_cast<int>(hud_alpha_ * 150));
+    } else {
+      bar_outline_color.setAlpha(static_cast<int>(hud_alpha_ * 200));
+    }
+    
+    painter.setPen(QPen(bar_outline_color, show_warning ? 3 : 2));
     painter.setBrush(QColor(255, 255, 255, 25));
     painter.drawRoundedRect(bar_outline, 8, 8);
 
@@ -605,11 +643,14 @@ void AttentionUncertaintyDisplay::updateHUD()
     const QRect filled_rect(bar_x + 3, fill_top + 3, bar_width - 6, filled_height - 6);
 
     if (filled_rect.height() > 0) {
-      const bool blink_on = is_classification && blink_state_ && cert <= static_cast<double>(blink_threshold_);
+      const bool blink_on = blink_state_ && (show_warning || cert <= static_cast<double>(blink_threshold_));
       
       // Determine bar color based on certainty
       QColor bar_color;
-      if (cert >= static_cast<double>(high_threshold_)) {
+      if (show_warning) {
+        // Force red when warning
+        bar_color = low_col;
+      } else if (cert >= static_cast<double>(high_threshold_)) {
         bar_color = high_col;
       } else if (cert >= static_cast<double>(low_threshold_)) {
         bar_color = mid_col;
@@ -631,6 +672,36 @@ void AttentionUncertaintyDisplay::updateHUD()
       painter.drawRoundedRect(filled_rect, 6, 6);
     }
 
+    // Draw exclamation mark warning when conditions are met
+    if (show_warning) {
+      const int center_x = bar_x + bar_width / 2;
+      const int center_y = bar_y + bar_height / 2;
+      
+      // Exclamation mark triangle background (blinking)
+      if (blink_state_) {
+        QColor warning_bg(255, 70, 70, 220);
+        painter.setBrush(warning_bg);
+        painter.setPen(QPen(QColor(255, 200, 200), 2));
+        
+        // Draw warning triangle
+        QPolygonF triangle;
+        const int tri_size = std::min(bar_width - 8, 24);
+        triangle << QPointF(center_x, center_y - tri_size / 2)
+                 << QPointF(center_x - tri_size / 2, center_y + tri_size / 3)
+                 << QPointF(center_x + tri_size / 2, center_y + tri_size / 3);
+        painter.drawPolygon(triangle);
+        
+        // Draw exclamation mark
+        QFont warn_font = base_font;
+        warn_font.setPointSize(12);
+        warn_font.setBold(true);
+        painter.setFont(warn_font);
+        painter.setPen(QColor(255, 255, 255, 255));
+        painter.drawText(QRectF(center_x - 10, center_y - tri_size / 2, 20, tri_size),
+                         Qt::AlignHCenter | Qt::AlignVCenter, QStringLiteral("!"));
+      }
+    }
+
     // Threshold ticks
     painter.setPen(QPen(QColor(255, 255, 255, 100), 1, Qt::DashLine));
     const auto threshold_to_y = [&](float threshold) {
@@ -644,13 +715,15 @@ void AttentionUncertaintyDisplay::updateHUD()
     painter.drawLine(bar_x + 2, mid_y, bar_x + bar_width - 2, mid_y);
   };
 
-  // Draw classification bar (left)
+  // Draw classification bar (left) - warning if no data or suspiciously low
+  const bool cls_warning = no_data || suspiciously_low_cls;
   drawBar(class_bar_x, smoothed_classification_certainty_, have_classification_certainty_,
-          high_color_, mid_color_, low_color_, true);
+          high_color_, mid_color_, low_color_, true, cls_warning);
 
-  // Draw regression bar (right)
+  // Draw regression bar (right) - warning if no data or suspiciously low
+  const bool reg_warning = no_data || suspiciously_low_reg;
   drawBar(regr_bar_x, smoothed_regression_certainty_, have_regression_certainty_,
-          regression_high_color_, regression_mid_color_, regression_low_color_, false);
+          regression_high_color_, regression_mid_color_, regression_low_color_, false, reg_warning);
 
   // Bar labels
   QFont label_font = base_font;
@@ -682,19 +755,68 @@ void AttentionUncertaintyDisplay::updateHUD()
   const double class_percentage = smoothed_classification_certainty_ * 100.0;
   const double regr_percentage = smoothed_regression_certainty_ * 100.0;
 
-  QString class_text = have_classification_certainty_
-    ? QString::number(class_percentage, 'f', 0) + QLatin1String("%")
-    : QStringLiteral("--%");
+  // Show "NO DATA" in red if no data warning is active
+  QString class_text;
+  QString regr_text;
 
-  QString regr_text = have_regression_certainty_
-    ? QString::number(regr_percentage, 'f', 0) + QLatin1String("%")
-    : QStringLiteral("--%");
+  if (no_data) {
+    class_text = QStringLiteral("N/A");
+    regr_text = QStringLiteral("N/A");
+    // Draw in red for no data
+    painter.setPen(blink_state_ ? QColor(255, 80, 80) : QColor(180, 60, 60));
+  } else {
+    class_text = have_classification_certainty_
+      ? QString::number(class_percentage, 'f', 0) + QLatin1String("%")
+      : QStringLiteral("--%");
+
+    regr_text = have_regression_certainty_
+      ? QString::number(regr_percentage, 'f', 0) + QLatin1String("%")
+      : QStringLiteral("--%");
+    
+    // Orange/red if suspiciously low
+    if (suspiciously_low_cls) {
+      painter.setPen(blink_state_ ? QColor(255, 150, 50) : QColor(180, 100, 40));
+    }
+  }
 
   painter.drawText(QRectF(class_bar_x - 10, bar_y + bar_height + 20, bar_width + 20, 20),
                    Qt::AlignHCenter | Qt::AlignVCenter, class_text);
 
+  // Reset pen for regression if not in warning state
+  if (no_data) {
+    painter.setPen(blink_state_ ? QColor(255, 80, 80) : QColor(180, 60, 60));
+  } else if (suspiciously_low_reg) {
+    painter.setPen(blink_state_ ? QColor(255, 150, 50) : QColor(180, 100, 40));
+  } else {
+    painter.setPen(value_color);
+  }
+
   painter.drawText(QRectF(regr_bar_x - 10, bar_y + bar_height + 20, bar_width + 20, 20),
                    Qt::AlignHCenter | Qt::AlignVCenter, regr_text);
+
+  // Warning message at the bottom if any warning is active
+  if (no_data || suspiciously_low_cls || suspiciously_low_reg) {
+    QFont warning_font = base_font;
+    warning_font.setPointSize(9);
+    warning_font.setBold(true);
+    painter.setFont(warning_font);
+    
+    QString warning_msg;
+    QColor warning_text_color;
+    
+    if (no_data) {
+      warning_msg = QStringLiteral("⚠ NO DATA!");
+      warning_text_color = blink_state_ ? QColor(255, 80, 80) : QColor(180, 60, 60);
+    } else {
+      warning_msg = QStringLiteral("⚠ Uncertain!");
+      warning_text_color = blink_state_ ? QColor(255, 150, 50) : QColor(180, 100, 40);
+    }
+    
+    painter.setPen(warning_text_color);
+    const int warning_y = bar_y + bar_height + 42;
+    painter.drawText(QRectF(margin, warning_y, hud_width_ - 2 * margin, 16),
+                     Qt::AlignHCenter | Qt::AlignVCenter, warning_msg);
+  }
 
   painter.end();
   pixel_buffer->unlock();

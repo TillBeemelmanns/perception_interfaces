@@ -52,6 +52,7 @@ if(${ROS_VERSION} EQUAL 2)
     include/perception_msgs/displays/attention_uncertainty/attention_uncertainty_display.hpp
     include/perception_msgs/displays/uncertainty_graph/uncertainty_graph_display.hpp
     include/perception_msgs/displays/vehicle_sensor_hud/vehicle_sensor_hud_display.hpp
+    include/perception_msgs/displays/model_card/model_card_display.hpp
   )
 
   foreach(header "${display_headers_to_moc}")
@@ -72,6 +73,7 @@ if(${ROS_VERSION} EQUAL 2)
     src/displays/attention_uncertainty/attention_uncertainty_display.cpp
     src/displays/uncertainty_graph/uncertainty_graph_display.cpp
     src/displays/vehicle_sensor_hud/vehicle_sensor_hud_display.cpp
+    src/displays/model_card/model_card_display.cpp
   )
 
   add_library(${PROJECT_NAME} SHARED

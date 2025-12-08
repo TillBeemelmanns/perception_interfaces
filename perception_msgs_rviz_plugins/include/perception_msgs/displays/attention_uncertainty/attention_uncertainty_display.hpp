@@ -131,6 +131,9 @@ private:
   bool update_required_;
   bool blink_state_;
   double blink_timer_;
+  double no_data_timer_;  // Timer for detecting no incoming data
+  static constexpr double kNoDataTimeout = 2.0;  // Seconds before showing "no data" warning
+  static constexpr double kSuspiciouslyLowThreshold = 0.15;  // 15% - suspiciously low certainty
 
   Ogre::Overlay* overlay_;
   Ogre::PanelOverlayElement* panel_;

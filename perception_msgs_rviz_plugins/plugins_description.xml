@@ -132,4 +132,14 @@
     <message_type>perception_msgs/msg/ObjectList</message_type>
   </class>
 
+  <class
+    name="ModelCard"
+    type="perception_msgs::displays::ModelCardDisplay"
+    base_class_type="rviz_common::Display"
+  >
+    <description>
+      Model information card showing key neural network facts like name, version, accuracy, and architecture in an expandable futuristic panel.
+    </description>
+  </class>
+
 </library>
