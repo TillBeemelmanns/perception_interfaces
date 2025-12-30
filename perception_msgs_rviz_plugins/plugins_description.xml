@@ -142,4 +142,14 @@
     </description>
   </class>
 
+  <class
+    name="DataCard"
+    type="perception_msgs::displays::DataCardDisplay"
+    base_class_type="rviz_common::Display"
+  >
+    <description>
+      Dataset information card for Trustworthy AI showing training data statistics, class distributions, pretraining info, and GDPR compliance.
+    </description>
+  </class>
+
 </library>

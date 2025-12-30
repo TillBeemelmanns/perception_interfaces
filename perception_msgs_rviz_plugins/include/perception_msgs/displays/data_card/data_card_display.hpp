@@ -27,7 +27,6 @@ SOFTWARE.
 #include <mutex>
 
 #include "rviz_common/display.hpp"
-#include "rviz_common/properties/bool_property.hpp"
 #include "rviz_common/properties/float_property.hpp"
 #include "rviz_common/properties/int_property.hpp"
 #include "rviz_common/properties/string_property.hpp"
@@ -44,18 +43,18 @@ namespace perception_msgs {
 namespace displays {
 
 /**
- * @brief Model Card overlay displaying essential model information in a futuristic panel.
+ * @brief Data Card overlay displaying dataset information for Trustworthy AI.
  * 
- * Shows key model facts like name, version, training dataset, accuracy metrics,
- * model size, and deployment date. Features an expandable design with a neural
- * network icon and smooth animations.
+ * Shows training dataset statistics including class distributions,
+ * LiDAR points per sample, pretraining information, and GDPR compliance.
+ * Features the same futuristic visual style as ModelCard.
  */
-class ModelCardDisplay : public rviz_common::Display {
+class DataCardDisplay : public rviz_common::Display {
   Q_OBJECT
 
 public:
-  ModelCardDisplay();
-  ~ModelCardDisplay() override;
+  DataCardDisplay();
+  ~DataCardDisplay() override;
 
   void onInitialize() override;
   void onEnable() override;
@@ -66,14 +65,16 @@ private Q_SLOTS:
   void updatePosition();
   void updateSize();
   void updateAppearance();
-  void updateModelInfo();
+  void updateDatasetInfo();
 
 private:
   void createOverlay();
   void destroyOverlay();
   void updateHUD();
   void drawHUD(class QPainter& painter);
-  void drawNeuralNetIcon(class QPainter& painter, int x, int y, int size);
+  void drawDatasetIcon(class QPainter& painter, int x, int y, int size);
+  void drawClassBar(class QPainter& painter, int x, int y, int width, int height,
+                    const QString& label, int count, int max_count, const QColor& color);
 
   // Properties - Position & Size
   rviz_common::properties::IntProperty* left_property_;
@@ -82,17 +83,17 @@ private:
   rviz_common::properties::FloatProperty* alpha_property_;
   rviz_common::properties::FloatProperty* bg_alpha_property_;
 
-  // Properties - Model Information
-  rviz_common::properties::StringProperty* model_name_property_;
-  rviz_common::properties::StringProperty* model_version_property_;
-  rviz_common::properties::StringProperty* model_date_property_;
-  rviz_common::properties::StringProperty* training_dataset_property_;
-  rviz_common::properties::StringProperty* model_size_property_;
-  rviz_common::properties::StringProperty* accuracy_property_;
-  rviz_common::properties::StringProperty* inference_time_property_;
-  rviz_common::properties::StringProperty* framework_property_;
-  rviz_common::properties::StringProperty* input_shape_property_;
-  rviz_common::properties::StringProperty* output_classes_property_;
+  // Properties - Dataset Information
+  rviz_common::properties::StringProperty* dataset_name_property_;
+  rviz_common::properties::StringProperty* dataset_version_property_;
+  rviz_common::properties::StringProperty* pretrain_dataset_property_;
+  rviz_common::properties::StringProperty* points_per_sample_property_;
+  rviz_common::properties::IntProperty* car_count_property_;
+  rviz_common::properties::IntProperty* pedestrian_count_property_;
+  rviz_common::properties::IntProperty* truck_count_property_;
+  rviz_common::properties::IntProperty* trailer_count_property_;
+  rviz_common::properties::IntProperty* bus_count_property_;
+  rviz_common::properties::IntProperty* twowheeler_count_property_;
 
   // Display state
   int left_;
@@ -106,17 +107,17 @@ private:
   double animation_phase_;
   double pulse_phase_;
   
-  // Model info cache
-  QString model_name_;
-  QString model_version_;
-  QString model_date_;
-  QString training_dataset_;
-  QString model_size_;
-  QString accuracy_;
-  QString inference_time_;
-  QString framework_;
-  QString input_shape_;
-  QString output_classes_;
+  // Dataset info cache
+  QString dataset_name_;
+  QString dataset_version_;
+  QString pretrain_dataset_;
+  QString points_per_sample_;
+  int car_count_;
+  int pedestrian_count_;
+  int truck_count_;
+  int trailer_count_;
+  int bus_count_;
+  int twowheeler_count_;
 
   // Overlay resources
   Ogre::Overlay* overlay_;

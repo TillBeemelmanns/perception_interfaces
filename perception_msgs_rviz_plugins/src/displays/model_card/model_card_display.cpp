@@ -506,7 +506,7 @@ void ModelCardDisplay::drawHUD(QPainter& painter)
   
   row_y += 32;
   
-  // Certification/Trust badge
+  // Certification/Trust badge - Uncertainty Quantification
   QColor badge_bg(60, 100, 160, alpha_val);
   QRectF badge_rect(margin, row_y, width_ - 2 * margin, 24);
   QPainterPath badge_path;
@@ -516,7 +516,31 @@ void ModelCardDisplay::drawHUD(QPainter& painter)
   painter.setFont(label_font);
   painter.setPen(QColor(200, 230, 255, alpha_val));
   painter.drawText(badge_rect, Qt::AlignCenter, 
-                   QStringLiteral("Certified - Uncertainty Quantification"));
+                   QStringLiteral("Uncertainty Quantification ✓"));
+
+  // Robustness badge
+  row_y += 30;
+  QColor robust_bg(60, 140, 100, alpha_val);
+  QRectF robust_rect(margin, row_y, width_ - 2 * margin, 24);
+  QPainterPath robust_path;
+  robust_path.addRoundedRect(robust_rect, 6, 6);
+  painter.fillPath(robust_path, robust_bg);
+  
+  painter.setPen(QColor(200, 255, 220, alpha_val));
+  painter.drawText(robust_rect, Qt::AlignCenter, 
+                   QStringLiteral("Robustness ✓"));
+
+  // XAI badge
+  row_y += 30;
+  QColor xai_bg(100, 80, 160, alpha_val);
+  QRectF xai_rect(margin, row_y, width_ - 2 * margin, 24);
+  QPainterPath xai_path;
+  xai_path.addRoundedRect(xai_rect, 6, 6);
+  painter.fillPath(xai_path, xai_bg);
+  
+  painter.setPen(QColor(220, 210, 255, alpha_val));
+  painter.drawText(xai_rect, Qt::AlignCenter, 
+                   QStringLiteral("XAI ✓"));
 }
 
 void ModelCardDisplay::drawNeuralNetIcon(QPainter& painter, int x, int y, int size)
