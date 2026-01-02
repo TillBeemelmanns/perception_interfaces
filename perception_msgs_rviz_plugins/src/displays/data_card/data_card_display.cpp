@@ -404,7 +404,7 @@ void DataCardDisplay::drawHUD(QPainter& painter)
   
   // Total samples with pulsing glow
   int total_samples = car_count_ + pedestrian_count_ + truck_count_ + 
-                      trailer_count_ + bus_count_ + twowheeler_count_;
+                      trailer_count_ + twowheeler_count_;
   double pulse = 0.5 + 0.5 * std::sin(pulse_phase_);
   QColor total_color(0, 220, 120, static_cast<int>(alpha_ * (180 + 75 * pulse)));
   painter.setPen(total_color);
@@ -432,13 +432,13 @@ void DataCardDisplay::drawHUD(QPainter& painter)
 
   // Find max count for scaling bars
   int max_count = std::max({car_count_, pedestrian_count_, truck_count_, 
-                            trailer_count_, bus_count_, twowheeler_count_});
+                            trailer_count_, twowheeler_count_});
   max_count = std::max(max_count, 1);  // Avoid division by zero
 
   const int bar_start_y = section_y + 28;
   const int bar_height = 18;
   const int bar_spacing = 24;
-  const int bar_width = width_ - 2 * margin - 70;
+  const int bar_width = width_ - 2 * margin - 80;
   
   // Class bars with distinct colors
   struct ClassInfo {
@@ -452,8 +452,7 @@ void DataCardDisplay::drawHUD(QPainter& painter)
     {"Pedestrian", pedestrian_count_, QColor(255, 150, 100)},
     {"Truck", truck_count_, QColor(150, 100, 255)},
     {"Trailer", trailer_count_, QColor(255, 200, 80)},
-    {"Two-Wheeler", twowheeler_count_, QColor(100, 255, 180)},
-    {"Bus", bus_count_, QColor(255, 100, 150)}
+    {"Two-Wheeler", twowheeler_count_, QColor(100, 255, 180)}
   };
 
   int current_y = bar_start_y;
@@ -492,13 +491,25 @@ void DataCardDisplay::drawHUD(QPainter& painter)
   painter.setPen(QColor(220, 210, 255, alpha_val));
   painter.drawText(prop_rect, Qt::AlignCenter, 
                    QStringLiteral("Proprietary Private Dataset"));
+
+  // Risks and Biases badge
+  int risks_badge_y = prop_badge_y + 30;
+  QColor risks_bg(180, 100, 60, alpha_val);
+  QRectF risks_rect(margin, risks_badge_y, width_ - 2 * margin, 24);
+  QPainterPath risks_path;
+  risks_path.addRoundedRect(risks_rect, 6, 6);
+  painter.fillPath(risks_path, risks_bg);
+  
+  painter.setPen(QColor(255, 230, 200, alpha_val));
+  painter.drawText(risks_rect, Qt::AlignCenter, 
+                   QStringLiteral("Risks and Biases ⚠"));
 }
 
 void DataCardDisplay::drawClassBar(QPainter& painter, int x, int y, int width, int height,
                                    const QString& label, int count, int max_count, const QColor& color)
 {
   const int alpha_val = static_cast<int>(alpha_ * 255);
-  const int label_width = 70;
+  const int label_width = 80;
   
   // Label
   QFont label_font("Segoe UI", 8);
